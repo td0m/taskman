@@ -24,6 +24,7 @@ const (
 var (
 	icon   = lipgloss.NewStyle().Bold(true).Padding(0, 1)
 	undone = icon.Copy().Foreground(Secondary).Render("•")
+	folded = icon.Copy().Foreground(Secondary).Render("➤")
 	done   = icon.Copy().Foreground(Green).Render("✓")
 
 	title     = lipgloss.NewStyle()
@@ -38,11 +39,13 @@ var (
 )
 
 func RenderIcon(t task.Task) string {
-	icon := undone
 	if t.Done != nil {
-		icon = done
+		return done
 	}
-	return icon
+	if t.Folded {
+		return folded
+	}
+	return undone
 }
 
 func Title(t task.Task) lipgloss.Style {

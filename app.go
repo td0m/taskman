@@ -128,6 +128,15 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case normalMode:
 			anchor := 1
 			switch msg.String() {
+			case tea.KeyTab.String():
+				id := getID(m.atCursor())
+				t := m.all[id]
+				// TODO: handle error without panicking
+				m.all.SetFolded(id, !t.Folded)
+				// if err != nil {
+				// 	panic(err)
+				// }
+				m.updateVisible()
 			case "i":
 				m.edit()
 			case tea.KeyDelete.String():
@@ -147,7 +156,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.setCursor(m.cursor + 1)
 			case "k":
 				m.setCursor(m.cursor - 1)
-			case "t":
+			case tea.KeyEnter.String():
 				id := getID(m.atCursor())
 				now := time.Now()
 				var err error
@@ -395,6 +404,9 @@ func (m app) renderTasks() string {
 func traverse(m task.Tasks, id task.ID) []path {
 	v := m[id]
 	all := []path{{id}}
+	if m[id].Folded {
+		return all
+	}
 	for _, child := range v.Children {
 		childPaths := traverse(m, child)
 		for _, subp := range childPaths {

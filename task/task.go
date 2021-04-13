@@ -11,6 +11,8 @@ type Task struct {
 	Done  *time.Time
 	Due   *time.Time
 
+	Folded bool
+
 	Children []ID
 }
 

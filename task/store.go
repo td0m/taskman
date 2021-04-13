@@ -75,6 +75,19 @@ func (tasks Tasks) SetDue(id ID, due *time.Time) error {
 	return nil
 }
 
+func (tasks Tasks) SetFolded(id ID, folded bool) error {
+	t, found := tasks[id]
+	if !found {
+		return ErrBadID
+	}
+	if len(t.Children) == 0 {
+		return errors.New("cannot fold empty")
+	}
+	t.Folded = folded
+	tasks[id] = t
+	return nil
+}
+
 func (tasks Tasks) Remove(id ID, parent ID) error {
 	p, ok := tasks[parent]
 	if !ok {
