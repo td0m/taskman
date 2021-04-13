@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/td0m/taskman/pkg/dateinput"
+	"github.com/td0m/taskman/storage"
 	"github.com/td0m/taskman/task"
 	"github.com/td0m/taskman/ui"
 )
@@ -34,7 +36,8 @@ type app struct {
 
 	mode mode
 
-	all task.Tasks
+	all     task.Tasks
+	storage *storage.JSONBackend
 
 	visible []path
 	cursor  int
@@ -48,8 +51,15 @@ func newApp() app {
 	ti.BackgroundColor = "#555"
 	ti.TextColor = "#000"
 
+	store := storage.NewJSON("./tasks.json")
+	data, err := store.Fetch()
+	if err != nil {
+		panic(err)
+	}
+
 	return app{
-		all:       task.Tasks{"0": {}},
+		all:       data,
+		storage:   store,
 		viewport:  viewport.Model{},
 		textinput: ti,
 		dateinput: dateinput.NewModel(),
@@ -76,7 +86,12 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = msg.Height - verticalMargins
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
-			return m, tea.Quit
+			_, err := m.storage.Sync(m.all)
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				return m, tea.Quit
+			}
 		}
 		if msg.Type == tea.KeyEsc {
 			m.mode = normalMode
