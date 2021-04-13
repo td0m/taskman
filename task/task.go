@@ -7,9 +7,10 @@ type ID string
 type Tasks map[ID]Task
 
 type Task struct {
-	Title string
-	Done  *time.Time
-	Due   *time.Time
+	Title   string
+	Created time.Time
+	Done    *time.Time
+	Due     *time.Time
 
 	Folded bool
 
@@ -17,5 +18,7 @@ type Task struct {
 }
 
 func newTask() Task {
-	return Task{}
+	return Task{
+		Created: time.Now(),
+	}
 }
