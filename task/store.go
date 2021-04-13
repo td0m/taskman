@@ -32,7 +32,6 @@ func (tasks Tasks) Add(parent ID, cursor ID, anchor int) error {
 	}
 	newID := RandID()
 	t := newTask()
-	t.Title = string(newID)
 	tasks[newID] = t
 	for i, id := range p.Children {
 		if id == cursor {
@@ -43,6 +42,16 @@ func (tasks Tasks) Add(parent ID, cursor ID, anchor int) error {
 	}
 	p.Children = append(p.Children, newID)
 	tasks[parent] = p
+	return nil
+}
+
+func (tasks Tasks) SetTitle(id ID, title string) error {
+	t, found := tasks[id]
+	if !found {
+		return ErrBadID
+	}
+	t.Title = title
+	tasks[id] = t
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/td0m/taskman/pkg/dateinput"
@@ -29,6 +30,7 @@ type path []task.ID
 type app struct {
 	viewport  viewport.Model
 	dateinput dateinput.Model
+	textinput textinput.Model
 
 	mode mode
 
@@ -40,9 +42,16 @@ type app struct {
 
 // newApp creates a new taskman TUI app
 func newApp() app {
+	ti := textinput.NewModel()
+	ti.Focus()
+	ti.Prompt = ""
+	ti.BackgroundColor = "#555"
+	ti.TextColor = "#000"
+
 	return app{
 		all:       task.Tasks{"0": {}},
 		viewport:  viewport.Model{},
+		textinput: ti,
 		dateinput: dateinput.NewModel(),
 	}
 }
@@ -73,6 +82,19 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = normalMode
 		}
 		switch m.mode {
+		case titleMode:
+			if msg.Type == tea.KeyEnter {
+				m.mode = normalMode
+				id := getID(m.atCursor())
+				err := m.all.SetTitle(id, m.textinput.Value())
+				if err != nil {
+					panic(err)
+				}
+			} else {
+				m.textinput, cmd = m.textinput.Update(msg)
+				m.textinput.Width = len(m.textinput.Value()) + 1
+				cmds = append(cmds, cmd)
+			}
 		case dateMode:
 			if msg.Type == tea.KeyEnter {
 				m.mode = normalMode
@@ -88,6 +110,8 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case normalMode:
 			anchor := 1
 			switch msg.String() {
+			case "i":
+				m.edit()
 			case "d":
 				m.dateinput.SetValue(nil)
 				m.mode = dateMode
@@ -137,13 +161,21 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.updateVisible()
 				m.setCursor(m.cursor + anchor)
+				m.edit()
 			}
 		}
 	}
-
 	m.viewport.SetContent(m.renderTasks())
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *app) edit() {
+	m.mode = titleMode
+	t := m.all[getID(m.atCursor())]
+	m.textinput.SetValue(t.Title)
+	m.textinput.Width = len(m.textinput.Value()) + 1
+	m.textinput.SetCursor(m.textinput.Width)
 }
 
 func (m *app) setCursor(value int) {
@@ -243,26 +275,46 @@ func (m app) View() string {
 
 func (m app) renderTasks() string {
 	s := ""
-	for i, path := range m.visible {
+	for i, currentPath := range m.visible {
 		// s += strconv.Itoa(i) + "line\n"
-		task := m.all[getID(path)]
-		// prevLen := 0
-		// if i > 0 {
-		// 	prevLen = len(m.visible[i-1])
-		// }
-		// nextLen := 0
+		task := m.all[getID(currentPath)]
+		var (
+			prevPath path
+			nextPath path
+		)
+		if i > 0 {
+			prevPath = m.visible[i-1]
+		}
+		if i+1 < len(m.visible) {
+			nextPath = m.visible[i+1]
+		}
+		// rules for separating top level todos
+		if len(currentPath) == 2 && ((len(currentPath) != len(nextPath) && len(nextPath) != 0) || len(currentPath) != len(prevPath)) {
+			s += "\n"
+		}
 
 		// s +=
-		if len(path) > 2 {
-			s += strings.Repeat("  ", len(path)-2)
+		if len(currentPath) > 2 {
+			s += strings.Repeat("  ", len(currentPath)-2)
 		}
 
 		s += ui.RenderIcon(task)
-		title := ui.Title(task)
-		if i == m.cursor {
-			title = title.Copy().Background(ui.Faded).Foreground(ui.Background)
+		if m.mode == titleMode && i == m.cursor {
+			s += m.textinput.View()
+		} else {
+			title := ui.Title(task)
+			if i == m.cursor {
+				if m.mode == normalMode {
+					title = title.Copy().Background(ui.Faded).Foreground(ui.Background)
+				}
+			}
+			if len(currentPath) == 2 {
+				title = title.Copy().Bold(true)
+			} else {
+				title = title.Copy().Foreground(ui.Secondary)
+			}
+			s += title.Render(task.Title)
 		}
-		s += title.Render(task.Title)
 		if task.Done == nil {
 			s += ui.RenderDue(task)
 		}

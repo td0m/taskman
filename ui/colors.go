@@ -26,7 +26,7 @@ var (
 	undone = icon.Copy().Foreground(Secondary).Render("•")
 	done   = icon.Copy().Foreground(Green).Render("✓")
 
-	title     = lipgloss.NewStyle().Bold(true)
+	title     = lipgloss.NewStyle()
 	titleDone = title.Copy().Foreground(Secondary).Strikethrough(true)
 
 	due       = lipgloss.NewStyle().Foreground(Secondary)
