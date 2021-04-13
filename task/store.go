@@ -8,6 +8,7 @@ import (
 
 var (
 	ErrNoParent = errors.New("invalid parent ID")
+	ErrBadID    = errors.New("invalid ID")
 )
 
 func init() {
@@ -29,18 +30,81 @@ func (tasks Tasks) Add(parent ID, cursor ID, anchor int) error {
 	if !found {
 		return ErrNoParent
 	}
-	id := RandID()
-	tasks[id] = newTask()
+	newID := RandID()
+	t := newTask()
+	t.Title = string(newID)
+	tasks[newID] = t
 	for i, id := range p.Children {
 		if id == cursor {
-			p.Children = insert(p.Children, i+anchor, id)
+			p.Children = insert(p.Children, i+anchor, newID)
 			tasks[parent] = p
 			return nil
 		}
 	}
-	p.Children = append(p.Children, id)
+	p.Children = append(p.Children, newID)
 	tasks[parent] = p
 	return nil
+}
+
+func (tasks Tasks) SetDone(id ID, done *time.Time) error {
+	t, found := tasks[id]
+	if !found {
+		return ErrBadID
+	}
+	t.Done = done
+	tasks[id] = t
+	return nil
+}
+
+func (tasks Tasks) SetDue(id ID, due *time.Time) error {
+	t, found := tasks[id]
+	if !found {
+		return ErrBadID
+	}
+	t.Due = due
+	tasks[id] = t
+	return nil
+}
+
+func (tasks Tasks) Remove(id ID, parent ID) error {
+	p, ok := tasks[parent]
+	if !ok {
+		return errors.New("parent not found")
+	}
+	for i := range p.Children {
+		if p.Children[i] == id {
+			p.Children = remove(p.Children, i)
+			tasks[parent] = p
+			return nil
+		}
+	}
+	return errors.New("task not found")
+}
+
+func remove(s []ID, i int) []ID {
+	return append(s[:i], s[i+1:]...)
+}
+
+func (tasks Tasks) Move(id ID, oldParent ID, parent ID, cursor ID, anchor int) error {
+	p, ok := tasks[parent]
+	if !ok {
+		return errors.New("parent not found")
+	}
+	remove := func() error {
+		return tasks.Remove(id, oldParent)
+	}
+	for i, idd := range p.Children {
+		if idd == cursor {
+			p.Children = insert(p.Children, i+anchor, id)
+			tasks[parent] = p
+			return remove()
+		}
+	}
+	// if cursor not found
+	p.Children = append(p.Children, id)
+	tasks[parent] = p
+	return remove()
+
 }
 
 func insert(a []ID, index int, value ID) []ID {
