@@ -34,6 +34,8 @@ type app struct {
 	dateinput dateinput.Model
 	textinput textinput.Model
 
+	tabs ui.Tabs
+
 	mode mode
 
 	all     task.Tasks
@@ -63,6 +65,7 @@ func newApp() app {
 		viewport:  viewport.Model{},
 		textinput: ti,
 		dateinput: dateinput.NewModel(),
+		tabs:      ui.NewTabs([]string{"All", "Inbox", "Today"}),
 	}
 }
 
@@ -128,6 +131,18 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case normalMode:
 			anchor := 1
 			switch msg.String() {
+			case "alt+1":
+				m.tabs.Set(0)
+				m.setCursor(0)
+				m.updateVisible()
+			case "alt+2":
+				m.tabs.Set(1)
+				m.setCursor(0)
+				m.updateVisible()
+			case "alt+3":
+				m.tabs.Set(2)
+				m.setCursor(0)
+				m.updateVisible()
 			case tea.KeyTab.String():
 				id := getID(m.atCursor())
 				t := m.all[id]
@@ -215,6 +230,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.updateVisible()
 				m.setCursor(m.cursor + anchor)
+				m.edit()
 			}
 		}
 	}
@@ -297,7 +313,48 @@ func (m *app) moveUpLeft() bool {
 
 func (m *app) updateVisible() {
 	m.visible = traverse(m.all, "0")[1:]
+	today := time.Now().Truncate(time.Hour * 24)
+	tomorrow := today.Add(time.Hour * 24)
+	yday := today.Add(-time.Hour * 24)
+
+	inbox := func(t task.Task) bool {
+		return t.Due == nil
+	}
+	todayF := func(t task.Task) bool {
+		if m.tabs.LastChanged().Before(t.Created) {
+			return true
+		}
+		return (t.Done == nil || t.Done.After(yday)) && (t.Due != nil && t.Due.Before(tomorrow))
+
+	}
+	if m.tabs.Value() == 1 {
+		m.visible = m.filter(m.visible, inbox)
+	}
+	if m.tabs.Value() == 2 {
+		m.visible = m.filter(m.visible, todayF)
+	}
 	// TODO: clamp cursor
+	// m.setCursor(m.cursor) // for when we switch tabs and previous cursor is out of reach
+
+	// save
+	m.storage.Sync(m.all)
+}
+
+func (m *app) filter(paths []path, f func(task.Task) bool) []path {
+	arr := []path{}
+	// this makes sure that even if parent didn't pass the filter, it will still be displayed
+	pile := []path{}
+	for _, p := range paths {
+		if len(pile) > 0 && len(p) <= len(pile[len(pile)-1]) {
+			pile = []path{}
+		}
+		pile = append(pile, p)
+		if f(m.all[getID(p)]) {
+			arr = append(arr, pile...)
+			pile = []path{}
+		}
+	}
+	return arr
 }
 
 func (m app) atCursor() path {
@@ -358,7 +415,7 @@ func (m app) View() string {
 			statusline = m.dateinput.View()
 		}
 	}
-	return "\n\n\n" + m.viewport.View() + "\n" + statusline
+	return m.tabs.View() + m.viewport.View() + "\n" + statusline
 }
 
 func (m app) renderTasks() string {
