@@ -61,6 +61,12 @@ func (tasks Tasks) SetDone(id ID, done *time.Time) error {
 		return ErrBadID
 	}
 	t.Done = done
+	// update children as well
+	for _, child := range t.Children {
+		c := tasks[child]
+		c.Done = done
+		tasks[child] = c
+	}
 	tasks[id] = t
 	return nil
 }
