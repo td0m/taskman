@@ -86,7 +86,8 @@ func parseAbsolute(s string, now time.Time) (time.Time, error) {
 			month = int(now.Month())
 		}
 	}
-	return t.AddDate(year, month-1, 0), nil
+	date := t.AddDate(year, month-1, 0)
+	return date, nil
 }
 
 var formats = []string{

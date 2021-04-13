@@ -84,6 +84,9 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		verticalMargins := headerHeight + footerHeight
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - verticalMargins
+		// on init:
+		m.updateVisible()
+		m.setCursor(m.cursor)
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
 			_, err := m.storage.Sync(m.all)
@@ -127,6 +130,16 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "i":
 				m.edit()
+			case tea.KeyDelete.String():
+				parent, id := info(m.atCursor())
+				if len(id) > 0 {
+					err := m.all.Remove(id, parent)
+					if err != nil {
+						panic(err)
+					}
+					m.updateVisible()
+					m.setCursor(m.cursor)
+				}
 			case "d":
 				m.dateinput.SetValue(nil)
 				m.mode = dateMode
@@ -165,6 +178,23 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.updateVisible()
 					m.setCursor(c)
 				}
+			case "K":
+				parent, id := info(m.atCursor())
+				if m.moveSameParent(-1) {
+					above := getID(m.atCursor())
+					m.all.Move(above, parent, parent, id, 1)
+					m.updateVisible()
+				}
+			case "J":
+				c := m.cursor
+				parent, id := info(m.atCursor())
+				if m.moveSameParent(1) {
+					above := getID(m.atCursor())
+					m.all.Move(id, parent, parent, above, 1)
+					m.updateVisible()
+					m.setCursor(c)
+					m.moveSameParent(1)
+				}
 			case "O":
 				anchor = 0
 				fallthrough
@@ -176,7 +206,6 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.updateVisible()
 				m.setCursor(m.cursor + anchor)
-				m.edit()
 			}
 		}
 	}
@@ -196,12 +225,26 @@ func (m *app) edit() {
 func (m *app) setCursor(value int) {
 	size := len(m.visible)
 	m.cursor = clamp(value, 0, max(size-1, 0))
-	// update viewport
-	if m.cursor >= m.viewport.YOffset+m.viewport.Height {
-		m.viewport.YOffset = m.cursor - m.viewport.Height + 1
+
+	// for when no tasks
+	if size == 0 {
+		return
 	}
-	if m.cursor < m.viewport.YOffset {
-		m.viewport.YOffset = m.cursor
+
+	tasks := m.visible[:m.cursor]
+	linesBeforeCursor := 0
+	for i := range tasks {
+		linesBeforeCursor += m.sizeOf(i)
+	}
+
+	cursorSize := m.sizeOf(m.cursor)
+
+	if linesBeforeCursor >= m.viewport.YOffset+m.viewport.Height {
+		m.viewport.YOffset = linesBeforeCursor + cursorSize - m.viewport.Height
+	}
+
+	if linesBeforeCursor <= m.viewport.YOffset {
+		m.viewport.YOffset = linesBeforeCursor
 	}
 }
 
@@ -275,6 +318,27 @@ func getParent(path path) task.ID {
 	return path[len(path)-2]
 }
 
+// this function is needed to figure out the height of a task for scrolling to work properly
+// this is because they can have varying heights due to custom spacing between groups
+func (m app) sizeOf(i int) int {
+	var (
+		currentPath = m.visible[i]
+		prevPath    path
+		nextPath    path
+	)
+	if i > 0 {
+		prevPath = m.visible[i-1]
+	}
+	if i+1 < len(m.visible) {
+		nextPath = m.visible[i+1]
+	}
+	// rules for separating top level todos
+	if len(currentPath) == 2 && ((len(currentPath) != len(nextPath) && len(nextPath) != 0) || len(currentPath) != len(prevPath)) {
+		return 2
+	}
+	return 1
+}
+
 // View renders the program's UI, which is just a string. The view is
 // rendered after every Update.
 func (m app) View() string {
@@ -293,18 +357,8 @@ func (m app) renderTasks() string {
 	for i, currentPath := range m.visible {
 		// s += strconv.Itoa(i) + "line\n"
 		task := m.all[getID(currentPath)]
-		var (
-			prevPath path
-			nextPath path
-		)
-		if i > 0 {
-			prevPath = m.visible[i-1]
-		}
-		if i+1 < len(m.visible) {
-			nextPath = m.visible[i+1]
-		}
-		// rules for separating top level todos
-		if len(currentPath) == 2 && ((len(currentPath) != len(nextPath) && len(nextPath) != 0) || len(currentPath) != len(prevPath)) {
+
+		if m.sizeOf(i) == 2 {
 			s += "\n"
 		}
 
