@@ -127,7 +127,10 @@ func parseDate(s string) *time.Time {
 }
 
 func nextWeekday(t time.Time, d time.Weekday) time.Time {
-	day := int(d)
+	day := d - t.Weekday()
+	if day < 0 {
+		day += 7
+	}
 	return t.Add(time.Duration(day) * time.Hour * 24)
 }
 
