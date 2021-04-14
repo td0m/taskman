@@ -102,6 +102,25 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Type == tea.KeyEsc {
 			m.mode = normalMode
 		}
+		if msg.Type == tea.KeyTab {
+			c := m.cursor
+			parent, id := info(m.atCursor())
+			if m.moveSameParent(-1) {
+				_, above := info(m.atCursor())
+				m.all.Move(id, parent, above, "", 1)
+				m.updateVisible()
+				m.setCursor(c)
+			}
+		} else if msg.Type == tea.KeyShiftTab {
+			c := m.cursor
+			parent, id := info(m.atCursor())
+			if m.moveUpLeft() {
+				newParent, above := info(m.atCursor())
+				m.all.Move(id, parent, newParent, above, 1)
+				m.updateVisible()
+				m.setCursor(c)
+			}
+		}
 		switch m.mode {
 		case titleMode:
 			if msg.Type == tea.KeyEnter {
@@ -143,7 +162,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.tabs.Set(2)
 				m.setCursor(0)
 				m.updateVisible()
-			case tea.KeyTab.String():
+			case tea.KeyEnter.String():
 				id := getID(m.atCursor())
 				t := m.all[id]
 				// TODO: handle error without panicking
@@ -171,7 +190,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.setCursor(m.cursor + 1)
 			case "k":
 				m.setCursor(m.cursor - 1)
-			case tea.KeyEnter.String():
+			case "t":
 				id := getID(m.atCursor())
 				now := time.Now()
 				var err error
@@ -184,24 +203,6 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					panic(err)
 				}
 				m.updateVisible()
-			case "H":
-				c := m.cursor
-				parent, id := info(m.atCursor())
-				if m.moveUpLeft() {
-					newParent, above := info(m.atCursor())
-					m.all.Move(id, parent, newParent, above, 1)
-					m.updateVisible()
-					m.setCursor(c)
-				}
-			case "L":
-				c := m.cursor
-				parent, id := info(m.atCursor())
-				if m.moveSameParent(-1) {
-					_, above := info(m.atCursor())
-					m.all.Move(id, parent, above, "", 1)
-					m.updateVisible()
-					m.setCursor(c)
-				}
 			case "K":
 				parent, id := info(m.atCursor())
 				if m.moveSameParent(-1) {
