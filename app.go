@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/td0m/taskman/pkg/dateinput"
 	"github.com/td0m/taskman/storage"
 	"github.com/td0m/taskman/task"
@@ -29,12 +31,15 @@ const (
 
 type path []task.ID
 
+type predicate func(task.Task) bool
+
 type app struct {
 	viewport  viewport.Model
 	dateinput dateinput.Model
 	textinput textinput.Model
 
-	tabs ui.Tabs
+	tabs       ui.Tabs
+	predicates []predicate
 
 	mode mode
 
@@ -59,13 +64,28 @@ func newApp() app {
 		panic(err)
 	}
 
+	today := time.Now().Truncate(time.Hour * 24)
+	tomorrow := today.Add(time.Hour * 24)
+	yday := today.Add(-time.Hour * 24)
+
+	all := func(t task.Task) bool {
+		return t.Done == nil || t.Done.After(today.Add(-time.Hour*24*5))
+	}
+	inbox := func(t task.Task) bool {
+		return t.Due == nil
+	}
+	todayF := func(t task.Task) bool {
+		return (t.Done == nil || t.Done.After(yday)) && (t.Due != nil && t.Due.Before(tomorrow))
+	}
+
 	return app{
-		all:       data,
-		storage:   store,
-		viewport:  viewport.Model{},
-		textinput: ti,
-		dateinput: dateinput.NewModel(),
-		tabs:      ui.NewTabs([]string{"All", "Inbox", "Today"}),
+		all:        data,
+		storage:    store,
+		viewport:   viewport.Model{},
+		textinput:  ti,
+		dateinput:  dateinput.NewModel(),
+		tabs:       ui.NewTabs([]string{"All", "Inbox", "Today"}),
+		predicates: []predicate{all, inbox, todayF},
 	}
 }
 
@@ -87,6 +107,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		verticalMargins := headerHeight + footerHeight
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - verticalMargins
+		m.tabs.Width = msg.Width
 		// on init:
 		m.updateVisible()
 		m.setCursor(m.cursor)
@@ -314,34 +335,26 @@ func (m *app) moveUpLeft() bool {
 
 func (m *app) updateVisible() {
 	m.visible = traverse(m.all, "0")[1:]
-	today := time.Now().Truncate(time.Hour * 24)
-	tomorrow := today.Add(time.Hour * 24)
-	yday := today.Add(-time.Hour * 24)
 
-	inbox := func(t task.Task) bool {
-		return t.Due == nil
-	}
-	todayF := func(t task.Task) bool {
-		if m.tabs.LastChanged().Before(t.Created) {
-			return true
-		}
-		return (t.Done == nil || t.Done.After(yday)) && (t.Due != nil && t.Due.Before(tomorrow))
-
-	}
-	if m.tabs.Value() == 1 {
-		m.visible = m.filter(m.visible, inbox)
-	}
-	if m.tabs.Value() == 2 {
-		m.visible = m.filter(m.visible, todayF)
-	}
+	m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
 	// TODO: clamp cursor
 	// m.setCursor(m.cursor) // for when we switch tabs and previous cursor is out of reach
 
 	// save
 	m.storage.Sync(m.all)
+
+	sum, done := 0, 0
+	for _, path := range m.visible {
+		if m.all[getID(path)].Done != nil {
+			done++
+		}
+		sum++
+	}
+	percent := done * 100 / sum
+	m.tabs.Info = lipgloss.NewStyle().Foreground(ui.Secondary).Render(strconv.Itoa(percent) + "%")
 }
 
-func (m *app) filter(paths []path, f func(task.Task) bool) []path {
+func (m *app) filter(paths []path, f predicate) []path {
 	arr := []path{}
 	// this makes sure that even if parent didn't pass the filter, it will still be displayed
 	pile := []path{}
@@ -350,7 +363,9 @@ func (m *app) filter(paths []path, f func(task.Task) bool) []path {
 			pile = []path{}
 		}
 		pile = append(pile, p)
-		if f(m.all[getID(p)]) {
+		t := m.all[getID(p)]
+		// still show those who have been created but don't meet the criteria
+		if m.tabs.LastChanged().Before(t.Created) || f(t) {
 			arr = append(arr, pile...)
 			pile = []path{}
 		}

@@ -18,6 +18,9 @@ type Tabs struct {
 	tabs []string
 	i    int
 
+	Width int
+	Info  string
+
 	lastChanged time.Time
 }
 
@@ -50,7 +53,11 @@ func (m Tabs) View() string {
 		}
 		tabs[i] = r.Render(t)
 	}
-	return tabContainer.Render(strings.Join(tabs, " | ")) + "\n"
+	w := lipgloss.Width
+	left := strings.Join(tabs, " | ")
+	right := m.Info
+	space := lipgloss.NewStyle().Width(m.Width - 2 - w(left) - w(right)).Render("")
+	return tabContainer.Render(lipgloss.JoinHorizontal(lipgloss.Center, left, space, right)) + "\n"
 }
 
 func (m Tabs) Value() int {
