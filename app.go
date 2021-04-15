@@ -186,9 +186,9 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "d":
 				m.dateinput.SetValue(nil)
 				m.mode = dateMode
-			case "j":
+			case "j", tea.KeyDown.String():
 				m.setCursor(m.cursor + 1)
-			case "k":
+			case "k", tea.KeyUp.String():
 				m.setCursor(m.cursor - 1)
 			case "t":
 				id := getID(m.atCursor())
