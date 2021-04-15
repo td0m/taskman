@@ -125,19 +125,20 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Type == tea.KeyTab {
 			c := m.cursor
-			parent, id := info(m.atCursor())
+			id := getID(m.atCursor())
 			if m.moveSameParent(-1) {
-				_, above := info(m.atCursor())
-				m.all.Move(id, parent, above, "", 1)
+				above := getID(m.atCursor())
+				m.all.Move(id, above, "", task.Below)
 				m.updateVisible()
 				m.setCursor(c)
 			}
 		} else if msg.Type == tea.KeyShiftTab {
 			c := m.cursor
-			parent, id := info(m.atCursor())
+			id := getID(m.atCursor())
 			if m.moveUpLeft() {
-				newParent, above := info(m.atCursor())
-				m.all.Move(id, parent, newParent, above, 1)
+				above := getID(m.atCursor())
+				newParent := m.all.Parent[above]
+				m.all.Move(id, newParent, above, 1)
 				m.updateVisible()
 				m.setCursor(c)
 			}
@@ -169,7 +170,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		case normalMode:
-			anchor := 1
+			anchor := task.Below
 			switch msg.String() {
 			case "alt+1":
 				m.tabs.Set(0)
@@ -185,7 +186,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateVisible()
 			case tea.KeyEnter.String():
 				id := getID(m.atCursor())
-				t := m.all[id]
+				t := m.all.Nodes[id]
 				// TODO: handle error without panicking
 				m.all.SetFolded(id, !t.Folded)
 				// if err != nil {
@@ -195,9 +196,9 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "i":
 				m.edit()
 			case tea.KeyDelete.String():
-				parent, id := info(m.atCursor())
+				id := getID(m.atCursor())
 				if len(id) > 0 {
-					err := m.all.Remove(id, parent)
+					err := m.all.Remove(id)
 					if err != nil {
 						panic(err)
 					}
@@ -215,7 +216,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				id := getID(m.atCursor())
 				now := time.Now()
 				var err error
-				if m.all[id].Done == nil {
+				if m.all.Nodes[id].Done == nil {
 					err = m.all.SetDone(id, &now)
 				} else {
 					err = m.all.SetDone(id, nil)
@@ -225,33 +226,33 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.updateVisible()
 			case "K":
-				parent, id := info(m.atCursor())
+				id := getID(m.atCursor())
 				if m.moveSameParent(-1) {
 					above := getID(m.atCursor())
-					m.all.Move(above, parent, parent, id, 1)
+					m.all.Move(above, m.all.Parent[id], id, task.Below)
 					m.updateVisible()
 				}
 			case "J":
 				c := m.cursor
-				parent, id := info(m.atCursor())
+				id := getID(m.atCursor())
 				if m.moveSameParent(1) {
 					above := getID(m.atCursor())
-					m.all.Move(id, parent, parent, above, 1)
+					m.all.Move(id, m.all.Parent[id], above, task.Below)
 					m.updateVisible()
 					m.setCursor(c)
 					m.moveSameParent(1)
 				}
 			case "O":
-				anchor = 0
+				anchor = task.Above
 				fallthrough
 			case "o":
-				parent, id := info(m.atCursor())
-				err := m.all.Add(parent, id, anchor)
+				id := getID(m.atCursor())
+				err := m.all.Add(m.all.Parent[id], id, anchor)
 				if err != nil {
 					panic(err)
 				}
 				m.updateVisible()
-				m.setCursor(m.cursor + anchor)
+				m.setCursor(m.cursor + int(anchor))
 				m.edit()
 			}
 		}
@@ -263,7 +264,7 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *app) edit() {
 	m.mode = titleMode
-	t := m.all[getID(m.atCursor())]
+	t := m.all.Nodes[getID(m.atCursor())]
 	m.textinput.SetValue(t.Title)
 	m.textinput.Width = len(m.textinput.Value()) + 1
 	m.textinput.SetCursor(m.textinput.Width)
@@ -345,13 +346,19 @@ func (m *app) updateVisible() {
 
 	sum, done := 0, 0
 	for _, path := range m.visible {
-		if m.all[getID(path)].Done != nil {
-			done++
+		t := m.all.Nodes[getID(path)]
+		// do not count those who are only there because its parent/child is
+		if m.predicates[m.tabs.Value()](t) {
+			if t.Done != nil {
+				done++
+			}
+			sum++
 		}
-		sum++
 	}
-	percent := done * 100 / sum
-	m.tabs.Info = lipgloss.NewStyle().Foreground(ui.Secondary).Render(strconv.Itoa(percent) + "%")
+	if sum > 0 {
+		percent := done * 100 / sum
+		m.tabs.Info = lipgloss.NewStyle().Foreground(ui.Secondary).Render(strconv.Itoa(percent) + "%")
+	}
 }
 
 func (m *app) filter(paths []path, f predicate) []path {
@@ -363,7 +370,7 @@ func (m *app) filter(paths []path, f predicate) []path {
 			pile = []path{}
 		}
 		pile = append(pile, p)
-		t := m.all[getID(p)]
+		t := m.all.Nodes[getID(p)]
 		// still show those who have been created but don't meet the criteria
 		if m.tabs.LastChanged().Before(t.Created) || f(t) {
 			arr = append(arr, pile...)
@@ -381,23 +388,11 @@ func (m app) atCursor() path {
 	return m.visible[m.cursor]
 }
 
-func info(path path) (task.ID, task.ID) {
-	return getParent(path), getID(path)
-}
-
 func getID(path path) task.ID {
 	if len(path) < 1 {
 		return ""
 	}
 	return path[len(path)-1]
-}
-
-func getParent(path path) task.ID {
-	// no parent -> assume root
-	if len(path) < 2 {
-		return "0"
-	}
-	return path[len(path)-2]
 }
 
 // this function is needed to figure out the height of a task for scrolling to work properly
@@ -438,7 +433,7 @@ func (m app) renderTasks() string {
 	s := ""
 	for i, currentPath := range m.visible {
 		// s += strconv.Itoa(i) + "line\n"
-		task := m.all[getID(currentPath)]
+		task := m.all.Nodes[getID(currentPath)]
 
 		if m.sizeOf(i) == 2 {
 			s += "\n"
@@ -461,8 +456,10 @@ func (m app) renderTasks() string {
 			}
 			if len(currentPath) == 2 {
 				title = title.Copy().Bold(true)
-			} else {
+			} else if len(currentPath) == 3 {
 				title = title.Copy().Foreground(ui.Secondary)
+			} else {
+				title = title.Copy().Foreground(ui.Faded)
 			}
 			s += title.Render(task.Title)
 		}
@@ -475,12 +472,11 @@ func (m app) renderTasks() string {
 }
 
 func traverse(m task.Tasks, id task.ID) []path {
-	v := m[id]
 	all := []path{{id}}
-	if m[id].Folded {
+	if m.Nodes[id].Folded {
 		return all
 	}
-	for _, child := range v.Children {
+	for _, child := range m.Children[id] {
 		childPaths := traverse(m, child)
 		for _, subp := range childPaths {
 			path := append([]task.ID{id}, subp...)

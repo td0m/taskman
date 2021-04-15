@@ -4,17 +4,27 @@ import "time"
 
 type ID string
 
-type Tasks map[ID]Task
+type Tasks struct {
+	Nodes    map[ID]Task `json:"nodes"`
+	Children map[ID][]ID `json:"children"`
+	Parent   map[ID]ID   `json:"parent"`
+}
+
+func NewTasks() Tasks {
+	return Tasks{
+		Nodes:    map[ID]Task{},
+		Children: map[ID][]ID{},
+		Parent:   map[ID]ID{},
+	}
+}
 
 type Task struct {
-	Title   string
-	Created time.Time
-	Done    *time.Time
-	Due     *time.Time
+	Title   string     `json:"title,omitempty"`
+	Created time.Time  `json:"created,omitempty"`
+	Done    *time.Time `json:"done,omitempty"`
+	Due     *time.Time `json:"due,omitempty"`
 
-	Folded bool
-
-	Children []ID
+	Folded bool `json:"folded,omitempty"`
 }
 
 func newTask() Task {
