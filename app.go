@@ -247,7 +247,11 @@ func (m app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				fallthrough
 			case "o":
 				id := getID(m.atCursor())
-				err := m.all.Add(m.all.Parent[id], id, anchor)
+				parent := m.all.Parent[id]
+				if len(parent) == 0 {
+					parent = "root"
+				}
+				err := m.all.Add(parent, id, anchor)
 				if err != nil {
 					panic(err)
 				}
@@ -335,7 +339,7 @@ func (m *app) moveUpLeft() bool {
 }
 
 func (m *app) updateVisible() {
-	m.visible = traverse(m.all, "0")[1:]
+	m.visible = traverse(m.all, "root")[1:]
 
 	m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
 	// TODO: clamp cursor

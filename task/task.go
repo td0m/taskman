@@ -12,7 +12,7 @@ type Tasks struct {
 
 func NewTasks() Tasks {
 	return Tasks{
-		Nodes:    map[ID]Task{},
+		Nodes:    map[ID]Task{"root": {}},
 		Children: map[ID][]ID{},
 		Parent:   map[ID]ID{},
 	}
