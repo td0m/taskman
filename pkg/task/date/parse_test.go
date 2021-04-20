@@ -38,6 +38,11 @@ func TestParseDate(t *testing.T) {
 		{"4th", []string{"4th"}, RepeatableDate{Type: DayOfTheMonth, Value: 4}, false},
 		{"18th", []string{"18th"}, RepeatableDate{Type: DayOfTheMonth, Value: 18}, false},
 		{"10th", []string{"10th"}, RepeatableDate{Type: DayOfTheMonth, Value: 10}, false},
+
+		{"1st Jan", []string{"1st Jan", "1st January"}, RepeatableDate{Type: OnceAYear, Value: dayMonth{1, 1}}, false},
+		{"1st Feb", []string{"1st Feb", "1st February"}, RepeatableDate{Type: OnceAYear, Value: dayMonth{1, 2}}, false},
+		{"1st Dec", []string{"1st Dec", "1st December"}, RepeatableDate{Type: OnceAYear, Value: dayMonth{1, 12}}, false},
+
 		// TODO: Add more test cases
 	}
 	for _, tt := range tests {

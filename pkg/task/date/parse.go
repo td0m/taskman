@@ -178,20 +178,39 @@ func parseDayOfMonth(s string) (RepeatableDate, error) {
 	lastDigit := n % 10
 	forceTh := (n%100 - lastDigit) == 10
 
+	endOfWord := len(s)
+	for i, c := range s {
+		if c == ' ' {
+			endOfWord = i
+			break
+		}
+	}
+	p := s[:endOfWord]
+
 	var valid bool
 	switch {
 	case n < 1 || n > 31:
 	case lastDigit == 1 && !forceTh:
-		valid = s == "st"
+		valid = p == "st"
 	case lastDigit == 2 && !forceTh:
-		valid = s == "nd"
+		valid = p == "nd"
 	case lastDigit == 3 && !forceTh:
-		valid = s == "rd"
+		valid = p == "rd"
 	default:
-		valid = s == "th"
+		valid = p == "th"
 	}
 	if !valid {
-		return RepeatableDate{}, errors.New("invalid postfix")
+		return RepeatableDate{}, errors.New("invalid day postfix")
+	}
+	s = strings.TrimSpace(s[2:])
+
+	if len(s) > 0 {
+		var month time.Month
+		s, month, err = parseMonth(s)
+		if err != nil {
+			return RepeatableDate{}, err
+		}
+		return NewOnceAYear(n, month), nil
 	}
 
 	return NewDayOfTheMonth(n), nil
@@ -218,4 +237,22 @@ func parseInt(s string) (string, int, error) {
 		i++
 	}
 	return s[i:], n, nil
+}
+
+func parseMonth(s string) (string, time.Month, error) {
+	endOfWord := len(s)
+	for i, c := range s {
+		if c == ' ' {
+			endOfWord = i
+			break
+		}
+	}
+	part := s[:endOfWord]
+	for m := time.January; m <= time.December; m++ {
+		fmt := strings.ToLower(m.String())
+		if part == fmt || part == fmt[:3] {
+			return s[endOfWord:], m, nil
+		}
+	}
+	return s, 0, errors.New("invalid")
 }
