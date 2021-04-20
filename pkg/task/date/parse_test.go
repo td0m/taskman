@@ -30,6 +30,14 @@ func TestParseDate(t *testing.T) {
 		{"friday", []string{"fri", "friday"}, RepeatableDate{Type: Weekday, Value: time.Friday}, false},
 		{"saturday", []string{"sat", "saturday"}, RepeatableDate{Type: Weekday, Value: time.Saturday}, false},
 		{"sunday", []string{"sun", "sunday"}, RepeatableDate{Type: Weekday, Value: time.Sunday}, false},
+
+		// TODO: test that 0, negative dates, invalid postfixes, and too high dates (like 40th) don't work
+		{"1st", []string{"1st"}, RepeatableDate{Type: DayOfTheMonth, Value: 1}, false},
+		{"2nd", []string{"2nd"}, RepeatableDate{Type: DayOfTheMonth, Value: 2}, false},
+		{"3rd", []string{"3rd"}, RepeatableDate{Type: DayOfTheMonth, Value: 3}, false},
+		{"4th", []string{"4th"}, RepeatableDate{Type: DayOfTheMonth, Value: 4}, false},
+		{"18th", []string{"18th"}, RepeatableDate{Type: DayOfTheMonth, Value: 18}, false},
+		{"10th", []string{"10th"}, RepeatableDate{Type: DayOfTheMonth, Value: 10}, false},
 		// TODO: Add more test cases
 	}
 	for _, tt := range tests {

@@ -27,13 +27,17 @@ func ParseDate(s string) (RepeatableDate, error) {
 	if err == nil {
 		return wkd, err
 	}
-	rel, err := parseOffset(s)
+	dayOffset, err := parseDayOffset(s)
 	if err == nil {
-		return rel, nil
+		return dayOffset, nil
 	}
-	abs, err := parseAbsolute(s)
+	once, err := parseAbsolute(s)
 	if err == nil {
-		return abs, nil
+		return once, nil
+	}
+	day, err := parseDayOfMonth(s)
+	if err == nil {
+		return day, nil
 	}
 
 	return RepeatableDate{}, errors.New("no format matches")
@@ -78,7 +82,7 @@ var multipliers = []multiplier{
 
 // TODO: add month/year repeatabledates
 // this will account for when month != 31 days and leap years
-func parseOffset(s string) (RepeatableDate, error) {
+func parseDayOffset(s string) (RepeatableDate, error) {
 	s = strings.TrimPrefix(s, "in")
 	s = strings.TrimSpace(s)
 	var (
@@ -96,25 +100,12 @@ func parseOffset(s string) (RepeatableDate, error) {
 	}
 	// parse quantity
 	{
-		i := 0
-		for {
-			if i >= len(s) {
-				break
-			}
-			var err error
-			n1, err := strconv.Atoi(s[:i+1])
-			// first one can not fail
-			if err != nil {
-				if i == 0 {
-					return RepeatableDate{}, err
-				} else {
-					break
-				}
-			}
-			n = n1
-			i++
+		s1, n1, err := parseInt(s)
+		if err != nil {
+			return RepeatableDate{}, err
 		}
-		s = strings.TrimSpace(s[i:])
+		n = n1
+		s = strings.TrimSpace(s1)
 	}
 
 	multiplier := 1
@@ -173,4 +164,58 @@ func parseWeekday(s string) (RepeatableDate, error) {
 		}
 	}
 	return RepeatableDate{}, errors.New("invalid weekday")
+}
+
+func parseDayOfMonth(s string) (RepeatableDate, error) {
+	var (
+		n   int
+		err error
+	)
+	s, n, err = parseInt(s)
+	if err != nil {
+		return RepeatableDate{}, errors.New("failed")
+	}
+	lastDigit := n % 10
+	forceTh := (n%100 - lastDigit) == 10
+
+	var valid bool
+	switch {
+	case n < 1 || n > 31:
+	case lastDigit == 1 && !forceTh:
+		valid = s == "st"
+	case lastDigit == 2 && !forceTh:
+		valid = s == "nd"
+	case lastDigit == 3 && !forceTh:
+		valid = s == "rd"
+	default:
+		valid = s == "th"
+	}
+	if !valid {
+		return RepeatableDate{}, errors.New("invalid postfix")
+	}
+
+	return NewDayOfTheMonth(n), nil
+}
+
+func parseInt(s string) (string, int, error) {
+	n := 0
+	i := 0
+	for {
+		if i >= len(s) {
+			break
+		}
+		var err error
+		n1, err := strconv.Atoi(s[:i+1])
+		// first one can not fail
+		if err != nil {
+			if i == 0 {
+				return s, 0, errors.New("failed to parse")
+			} else {
+				break
+			}
+		}
+		n = n1
+		i++
+	}
+	return s[i:], n, nil
 }
