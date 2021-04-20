@@ -10,22 +10,39 @@ func TestParseDate(t *testing.T) {
 	today := time.Now().Truncate(time.Hour * 24)
 	tests := []struct {
 		name    string
-		args    string
+		args    []string
 		want    RepeatableDate
 		wantErr bool
 	}{
-		{"Case Insensitive", "Today", RepeatableDate{Type: Once, Value: today}, false},
+		{"Case Insensitive", []string{"ToDAY"}, RepeatableDate{Type: Once, Value: today}, false},
+		{"today", []string{"today", "tod"}, RepeatableDate{Type: Once, Value: today}, false},
+		{"tomorrow", []string{"tomorrow", "tom", "1", "+1", "in 1 day", "1d", "1day", "1 day"}, RepeatableDate{Type: DayOffset, Value: 1}, false},
+		{"yesterday", []string{"yday", "yesterday", "1 day ago", "1d ago", "-1"}, RepeatableDate{Type: DayOffset, Value: -1}, false},
+		{"7 days", []string{"7 day", "7 days", "1 week", "7"}, RepeatableDate{Type: DayOffset, Value: 7}, false},
+		{"1 month", []string{"1 month", "1m"}, RepeatableDate{Type: DayOffset, Value: 30}, false},
+		{"1 year", []string{"1y", "in 1 year"}, RepeatableDate{Type: DayOffset, Value: 365}, false},
+
+		{"absolute", []string{"20/04/21", "20/04/2021", "20 April 2021", "20 Apr 2021"}, RepeatableDate{Type: Once, Value: time.Time{}.AddDate(2020, 3, 19)}, false},
+		{"monday", []string{"mon", "monday"}, RepeatableDate{Type: Weekday, Value: time.Monday}, false},
+		{"tuesday", []string{"tue", "tuesday"}, RepeatableDate{Type: Weekday, Value: time.Tuesday}, false},
+		{"wednesday", []string{"wed", "wednesday"}, RepeatableDate{Type: Weekday, Value: time.Wednesday}, false},
+		{"thursday", []string{"thu", "thursday"}, RepeatableDate{Type: Weekday, Value: time.Thursday}, false},
+		{"friday", []string{"fri", "friday"}, RepeatableDate{Type: Weekday, Value: time.Friday}, false},
+		{"saturday", []string{"sat", "saturday"}, RepeatableDate{Type: Weekday, Value: time.Saturday}, false},
+		{"sunday", []string{"sun", "sunday"}, RepeatableDate{Type: Weekday, Value: time.Sunday}, false},
 		// TODO: Add more test cases
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseDate(tt.args)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseDate() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ParseDate() = %v, want %v", got, tt.want)
+			for _, arg := range tt.args {
+				got, err := ParseDate(arg)
+				if (err != nil) != tt.wantErr {
+					t.Errorf("ParseDate(%s) error = %v, wantErr %v", arg, err, tt.wantErr)
+					return
+				}
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Errorf("ParseDate(%s) = %v, want %v", arg, got, tt.want)
+				}
 			}
 		})
 	}
