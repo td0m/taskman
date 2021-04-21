@@ -64,10 +64,7 @@ func (t Info) NextDue() *time.Time {
 	earliest := time.Unix(1<<63-1-unixToInternal, 999999999)
 	for _, d := range t.Due {
 		due := d.Next(*t.DueChanged)
-		if due == nil {
-			return nil
-		}
-		earliest = min(earliest, *due)
+		earliest = min(earliest, due)
 	}
 	return &earliest
 }

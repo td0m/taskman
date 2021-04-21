@@ -49,14 +49,11 @@ func NewDayOffset(days int) RepeatableDate {
 
 // returns a date after the provided date
 // errors if cannot compute a new date
-func (d RepeatableDate) Next(t time.Time) *time.Time {
+func (d RepeatableDate) Next(t time.Time) time.Time {
 	switch d.Type {
 	case Once:
 		newDate := d.Value.(time.Time)
-		if newDate.Before(t) {
-			return nil
-		}
-		return &newDate
+		return newDate
 	case OnceAYear:
 		dm := d.Value.(dayMonth)
 		months := int(dm.Month) - int(t.Month())
@@ -65,8 +62,7 @@ func (d RepeatableDate) Next(t time.Time) *time.Time {
 		if months < 0 || days < 0 || months == 0 && days == 0 {
 			years = 1
 		}
-		next := t.AddDate(years, months, days)
-		return &next
+		return t.AddDate(years, months, days)
 	case DayOfTheMonth:
 		nth := d.Value.(int)
 		months := 0
@@ -74,23 +70,18 @@ func (d RepeatableDate) Next(t time.Time) *time.Time {
 		if days <= 0 {
 			months = 1
 		}
-		next := t.AddDate(0, months, days)
-		return &next
+		return t.AddDate(0, months, days)
 	case Weekday:
 		w := d.Value.(time.Weekday)
 		days := int(w - t.Weekday())
 		if days <= 0 {
 			days += 7
 		}
-		next := t.AddDate(0, 0, days)
-		return &next
+		return t.AddDate(0, 0, days)
 	case DayOffset:
 		days := d.Value.(int)
-		if days == 0 {
-			return nil
-		}
 		next := t.AddDate(0, 0, days)
-		return &next
+		return next
 	default:
 		panic("unimplemented")
 	}
