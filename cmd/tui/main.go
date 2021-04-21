@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -26,10 +27,26 @@ func check(err error) {
 }
 
 func main() {
+	i := textinput.NewModel()
+	i.Focus()
+	i.Prompt = ""
+	i.Width = 40
+
 	a := &app{
-		viewport: viewport.Model{},
-		tabs:     ui.NewTabs([]string{"Outline", "Today"}),
-		store:    task.NewStore(),
+		nameinput: i,
+		viewport:  viewport.Model{},
+		tabs:      ui.NewTabs([]string{"Outline", "Today"}),
+		store:     task.NewStore(),
+		time:      time.Now(),
+		timeSetAt: time.Now(),
+	}
+
+	a.predicates = []predicate{
+		func(t task.Info) bool { return true },
+		func(t task.Info) bool {
+			due := t.NextDue()
+			return due != nil && due.Before(a.now())
+		},
 	}
 	p := tea.NewProgram(a)
 	p.EnableMouseAllMotion()
@@ -55,14 +72,21 @@ const (
 
 type path []task.ID
 
+type predicate func(task.Info) bool
+
 type app struct {
 	mode mode
 
-	viewport viewport.Model
-	tabs     ui.Tabs
+	viewport  viewport.Model
+	nameinput textinput.Model
+	tabs      ui.Tabs
 
-	cursor  int
-	visible []path
+	time      time.Time
+	timeSetAt time.Time
+
+	cursor     int
+	visible    []path
+	predicates []predicate
 
 	store task.StoreManager
 }
@@ -76,53 +100,107 @@ func (m app) Init() tea.Cmd {
 // Update is called when a message is received. Use it to inspect messages
 // and, in response, update the model and/or send a command.
 func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		cmd tea.Cmd
+	)
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		verticalMargins := headerHeight + footerHeight
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - verticalMargins
 		m.tabs.Width = msg.Width
-		m.render()
+		m.setCursor(m.cursor) // make sure cursor is visible
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			return m, tea.Quit
+		case tea.KeyEsc:
+			m.mode = modeNormal
 		default:
-			m.update(msg)
+			cmd = m.keyUpdate(msg)
 		}
 	}
-	return m, nil
+	m.render()
+	return m, cmd
 }
 
 // handle keys differently based on the current mode
-func (m *app) update(msg tea.KeyMsg) {
+func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 	switch m.mode {
+	case modeRename:
+		if msg.Type == tea.KeyEnter {
+			err := m.store.Rename(getID(m.atCursor()), m.nameinput.Value())
+			check(err)
+			m.mode = modeNormal
+		} else {
+			var cmd tea.Cmd
+			m.nameinput, cmd = m.nameinput.Update(msg)
+			return cmd
+		}
 	case modeNormal:
+		var pos task.Pos = task.Below
 		switch msg.String() {
 		case "alt+1":
 			m.tabs.Set(0)
+			m.updateTasks()
 		case "alt+2":
 			m.tabs.Set(1)
+			m.updateTasks()
 		case "j":
 			m.setCursor(m.cursor + 1)
-			m.render()
 		case "k":
 			m.setCursor(m.cursor - 1)
-			m.render()
+		case "i":
+			m.edit()
+		case "O":
+			pos = task.Above
+			fallthrough
 		case "o":
-			m.store.Create(task.RandomID(), time.Now())
+			focused := getID(m.atCursor())
+			id := task.RandomID()
+			check(m.store.Create(id, m.now()))
+			// we don't need to (and can't) move when there are no tasks yet
+			if focused != "" {
+				check(m.store.Move(id, focused, pos))
+			}
 			m.updateTasks()
+			m.setCursor(m.cursor + int(pos))
+			m.edit()
 		}
 	}
+	return nil
+}
+
+func (m app) now() time.Time {
+	return m.time.Add(time.Since(m.timeSetAt))
 }
 
 // updateTasks triggers a rerender of the viewport with all the tasks
 func (m *app) updateTasks() {
 	m.visible = traverse(m.store, "root")[1:]
 
-	// m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
-	m.render()
+	m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
 }
+
+func (m *app) filter(paths []path, f predicate) []path {
+	arr := []path{}
+	// this makes sure that even if parent didn't pass the filter, it will still be displayed
+	pile := []path{}
+	for _, p := range paths {
+		if len(pile) > 0 && len(p) <= len(pile[len(pile)-1]) {
+			pile = []path{}
+		}
+		pile = append(pile, p)
+		t := m.store.Get(getID(p))
+		// still show those who have been created but don't meet the criteria
+		if m.tabs.LastChanged().Before(t.Created) || f(t) {
+			arr = append(arr, pile...)
+			pile = []path{}
+		}
+	}
+	return arr
+}
+
 func (m *app) render() {
 	m.viewport.SetContent(m.viewTasks())
 }
@@ -168,11 +246,12 @@ func (m app) sizeOf(i int) int {
 
 func (m app) viewTasks() string {
 	s := ""
-	for i, id := range m.store.GetChildren("root") {
+	for i, path := range m.visible {
 		var (
 			bigspace bool
 			title    lipgloss.Style = ui.TaskTitle
 		)
+		id := getID(path)
 		t := m.store.Get(id)
 
 		// style differences
@@ -181,7 +260,7 @@ func (m app) viewTasks() string {
 		} else {
 			title = ui.SubTaskTitle
 		}
-		if i == m.cursor && m.mode == modeNormal {
+		if i == m.cursor {
 			title = title.Copy().Background(ui.Faded)
 		}
 
@@ -190,7 +269,12 @@ func (m app) viewTasks() string {
 			s += "\n"
 		}
 		s += ui.TaskIcon.Render(string(getIcon(t.Category)))
-		s += title.Render(t.Name + "name")
+		switch {
+		case m.mode == modeRename && m.cursor == i:
+			s += m.nameinput.View()
+		default:
+			s += title.Render(t.Name)
+		}
 		s += "\n"
 	}
 	return s
@@ -240,4 +324,25 @@ func traverse(s task.StoreManager, id task.ID) []path {
 		}
 	}
 	return all
+}
+func (m app) atCursor() path {
+	// if no items visible
+	if m.cursor >= len(m.visible) {
+		return []task.ID{}
+	}
+	return m.visible[m.cursor]
+}
+
+func getID(path path) task.ID {
+	if len(path) < 1 {
+		return ""
+	}
+	return path[len(path)-1]
+}
+
+func (m *app) edit() {
+	m.mode = modeRename
+	name := m.store.Get(getID(m.atCursor())).Name
+	m.nameinput.SetValue(name)
+	m.nameinput.SetCursor(len(name) - 1)
 }
