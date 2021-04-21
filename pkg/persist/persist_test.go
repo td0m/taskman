@@ -12,37 +12,50 @@ import (
 func TestJSON_SaveLoad(t *testing.T) {
 	is := is.New(t)
 
-	deadline := task.Task{Info: task.Info{ID: "deadline"}}
-	goal1 := task.Task{Info: task.Info{ID: "goal1"}}
-	goal2 := task.Task{Info: task.Info{ID: "goal2"}}
-	goals := task.Task{Info: task.Info{ID: "goals"}, Children: []*task.Task{&goal1, &goal2}}
-	root := task.Task{Info: task.Info{ID: "root"}, Children: []*task.Task{&goals, &deadline}}
-	goal1.Parent = &goals
-	goal2.Parent = &goals
-	goals.Parent = &root
-	deadline.Parent = &root
-	tasks := []task.Task{root, goals, goal1, goal2, deadline}
+	deadline := task.Info{}
+	goal1 := task.Info{}
+	goal2 := task.Info{}
+	goals := task.Info{}
+	root := task.Info{}
+	store := &task.Store{}
+	store.Nodes = map[task.ID]task.Info{
+		"root":     root,
+		"goals":    goals,
+		"goal1":    goal1,
+		"goal2":    goal2,
+		"deadline": deadline,
+	}
+	store.Parent = map[task.ID]task.ID{
+		"goal1":    "goals",
+		"goal2":    "goals",
+		"goals":    "root",
+		"deadline": "root",
+	}
+	store.Children = map[task.ID][]task.ID{
+		"root":  {"goals", "deadline"},
+		"goals": {"goal1", "goal2"},
+	}
+	tasks := store.Root()
 
 	json := InJSON(path.Join(os.TempDir(), "tasks.json"))
-	is.NoErr(json.Save(tasks))
+	is.NoErr(json.Save(store))
 
-	tasks2, err := json.Load()
+	store2, err := json.Load()
+	tasks2 := store2.Root()
 	is.NoErr(err)
-	is.Equal(len(tasks2), len(tasks))
+	is.Equal(len(tasks2.Children), len(tasks.Children))
 
-	root2 := &tasks2[0]
-	for root2.Parent != nil {
-		root2 = root2.Parent
-	}
-	is.Equal(dfs(root), dfs(*root2))
+	root2 := store.Root()
+	is.Equal(len(dfs(root2)), 5)
+	is.Equal(dfs(store.Root()), dfs(root2))
 }
 
 // dfs is a depth-first-search traversal utility
 // it is used to compare trees
-func dfs(t task.Task) []task.ID {
-	out := []task.ID{t.ID}
+func dfs(t *task.Task) []task.Task {
+	out := []task.Task{*t}
 	for _, child := range t.Children {
-		out = append(out, dfs(*child)...)
+		out = append(out, dfs(child)...)
 	}
 	return out
 }

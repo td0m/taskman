@@ -1,7 +1,6 @@
 package persist
 
 import (
-	"encoding/json"
 	"os"
 
 	"github.com/td0m/taskman/pkg/task"
@@ -21,12 +20,8 @@ func InJSON(file string) *JSON {
 }
 
 // Save saves a list of tasks to a json file
-func (j JSON) Save(ts []task.Task) error {
-	data, err := newSavable(ts)
-	if err != nil {
-		return err
-	}
-	bs, err := json.Marshal(data)
+func (j JSON) Save(store task.StoreManager) error {
+	bs, err := store.MarshalJSON()
 	if err != nil {
 		return err
 	}
@@ -37,21 +32,17 @@ func (j JSON) Save(ts []task.Task) error {
 }
 
 // Load loads and validates tasks in a json file
-func (j JSON) Load() ([]task.Task, error) {
+func (j JSON) Load() (*task.Store, error) {
 	bs, err := os.ReadFile(j.file)
 	if err != nil {
 		return nil, err
 	}
-	s, err := newSavable([]task.Task{})
-	if err != nil {
+	s := &task.Store{}
+	if err := s.UnmarshalJSON(bs); err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(bs, &s); err != nil {
+	if err = s.Check(); err != nil {
 		return nil, err
 	}
-	tasks, err := s.Load()
-	if err != nil {
-		return nil, err
-	}
-	return tasks, nil
+	return s, nil
 }

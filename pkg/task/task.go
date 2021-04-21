@@ -1,16 +1,34 @@
 package task
 
 import (
+	"math/rand"
 	"time"
 
 	"github.com/td0m/taskman/pkg/task/date"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 type ID string
+
+const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func randomString(l int) string {
+	b := make([]byte, l)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+func RandomID() ID {
+	return ID(randomString(8))
+}
 
 type Info struct {
 	// constants
-	ID ID
+	Created time.Time
 
 	// behavioural properties
 	Name        string
