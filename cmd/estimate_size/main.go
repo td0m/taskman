@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/td0m/taskman/pkg/persist"
@@ -17,24 +17,14 @@ func main() {
 	total := 365 * perDay * years
 	file := path.Join(os.TempDir(), "tasks.json")
 	p := persist.InJSON(file)
-	tasks := make([]task.Task, total)
-	for i := range tasks {
-		t := task.Task{
-			Info: task.Info{
-				ID:          task.ID(randomString(10)),
-				DoneHistory: []time.Time{time.Now()},
-				ClockIns: []task.ClockIn{
-					{Start: time.Now(), End: time.Now()},
-				},
-			},
-		}
-		if i > 0 {
-			t.Parent = &tasks[0]
-		}
-		tasks[i] = t
+	s := task.NewStore()
+	for i := 0; i < total; i++ {
+		id := task.RandomID()
+		check(s.Create(id, time.Now()))
+		check(s.Rename(id, strings.Repeat("-", 30)))
 	}
 	writeTime := measureTime(func() {
-		err := p.Save(tasks)
+		err := p.Save(s)
 		check(err)
 	})
 
@@ -61,17 +51,4 @@ func measureTime(fn func()) time.Duration {
 	start := time.Now()
 	fn()
 	return time.Since(start)
-}
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
-const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-func randomString(l int) string {
-	b := make([]byte, l)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
 }
