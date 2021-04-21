@@ -34,6 +34,7 @@ type Info struct {
 	Name        string
 	Repeats     bool
 	Due         []date.RepeatableDate
+	DueChanged  *time.Time
 	DoneHistory []time.Time
 	ClockIns    []ClockIn
 	Category    string
@@ -42,6 +43,33 @@ type Info struct {
 	// visibility properties
 	Archived bool
 	Folded   bool
+}
+
+func min(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
+}
+
+const unixToInternal int64 = (1969*365 + 1969/4 - 1969/100 + 1969/400) * 24 * 60 * 60
+
+// NextDue computes the next due date for a task
+// it gets all next due dates and returns the smallest one
+func (t Info) NextDue() *time.Time {
+	if len(t.Due) == 0 || t.DueChanged == nil {
+		return nil
+	}
+	// max time that still works with comparisons
+	earliest := time.Unix(1<<63-1-unixToInternal, 999999999)
+	for _, d := range t.Due {
+		due := d.Next(*t.DueChanged)
+		if due == nil {
+			return nil
+		}
+		earliest = min(earliest, *due)
+	}
+	return &earliest
 }
 
 type Task struct {

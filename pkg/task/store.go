@@ -29,7 +29,7 @@ type StoreManager interface {
 	SetCategory(ID, string) error
 	Do(ID, time.Time) error
 	UnDo(ID) error
-	SetDue(ID, []date.RepeatableDate) error
+	SetDue(ID, []date.RepeatableDate, time.Time) error
 	SetRepeats(ID, bool) error
 
 	Clock(ID, time.Time, time.Time) error
@@ -41,6 +41,8 @@ type StoreManager interface {
 	Get(ID) Info
 	GetChildren(ID) []ID
 	GetParent(ID) ID
+
+	NextDue(ID) *time.Time
 }
 
 var _ StoreManager = &Store{}
@@ -135,6 +137,10 @@ func (s *Store) SetCategory(_ ID, _ string) error {
 	panic("not implemented") // TODO: Implement
 }
 
+func (s *Store) recalculateDue(id ID, t time.Time) error {
+	return nil
+}
+
 func (s *Store) Do(_ ID, _ time.Time) error {
 	panic("not implemented") // TODO: Implement
 }
@@ -143,8 +149,17 @@ func (s *Store) UnDo(_ ID) error {
 	panic("not implemented") // TODO: Implement
 }
 
-func (s *Store) SetDue(_ ID, _ []date.RepeatableDate) error {
-	panic("not implemented") // TODO: Implement
+// SetDue sets the due date of a node
+// returns an error if task not found
+func (s *Store) SetDue(id ID, due []date.RepeatableDate, time time.Time) error {
+	node, ok := s.Nodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	node.Due = due
+	node.DueChanged = &time
+	s.Nodes[id] = node
+	return s.recalculateDue(id, time)
 }
 
 func (s *Store) SetRepeats(_ ID, _ bool) error {
@@ -258,4 +273,16 @@ func (s *Store) GetChildren(id ID) []ID {
 }
 func (s *Store) GetParent(id ID) ID {
 	return s.Parent[id]
+}
+
+func (s *Store) NextDue(id ID) *time.Time {
+	node, ok := s.Nodes[id]
+	if !ok {
+		return nil
+	}
+	due := node.NextDue()
+	if parentDue := s.NextDue(s.Parent[id]); parentDue != nil && (due == nil || (*parentDue).Before(*due)) {
+		return parentDue
+	}
+	return due
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/matryer/is"
+	"github.com/td0m/taskman/pkg/task/date"
 )
 
 func TestStore_Create(t *testing.T) {
@@ -96,6 +97,38 @@ func TestStore_Move(t *testing.T) {
 		is.NoErr(s.Create("root2", time.Now()))
 		err := s.Move("root2", "root", Below)
 		is.True(err != nil)
+	})
+}
+
+func TestStore_SetDue(t *testing.T) {
+	var s StoreManager = NewStore()
+
+	start := time.Time{}                 // monday
+	wed := start.Add(time.Hour * 24 * 2) // wednesday
+	t.Run("calcualtes NextDate", func(t *testing.T) {
+		is := is.New(t)
+
+		s.Create("deadline", start)
+		err := s.SetDue("deadline", []date.RepeatableDate{date.NewWeekday(time.Wednesday)}, start)
+		is.NoErr(err)
+		is.Equal(*s.Get("deadline").NextDue(), wed)
+
+		// err = s.Do("deadline", start)
+		// is.NoErr(err)
+	})
+
+	t.Run("(recursive) parent's due date is the maximum due date for all children", func(t *testing.T) {
+		is := is.New(t)
+		s.Create("deadline1", start)
+		s.Create("deadline1.1", start)
+		is.NoErr(s.Move("deadline1", "deadline", Into))
+		is.NoErr(s.Move("deadline1.1", "deadline1", Into))
+		s.SetDue("deadline1.1", []date.RepeatableDate{date.NewWeekday(time.Thursday)}, start)
+		is.Equal(*s.NextDue("deadline1.1"), wed)
+	})
+	t.Run("no due inside of an item with due will return parent's due date", func(t *testing.T) {
+		is := is.New(t)
+		is.Equal(*s.NextDue("deadline1"), wed)
 	})
 }
 
