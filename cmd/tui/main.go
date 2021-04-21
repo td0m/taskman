@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -126,6 +127,30 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handle keys differently based on the current mode
 func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
+	if m.mode == modeRename || m.mode == modeNormal {
+		if msg.Type == tea.KeyTab {
+			c := m.cursor
+			id := getID(m.atCursor())
+			if m.moveSameParent(-1) {
+				above := getID(m.atCursor())
+				m.store.Move(id, above, task.Into)
+				m.updateTasks()
+				m.setCursor(c)
+			}
+			return nil
+		}
+		if msg.Type == tea.KeyShiftTab {
+			c := m.cursor
+			id := getID(m.atCursor())
+			if m.moveUpLeft() {
+				above := getID(m.atCursor())
+				m.store.Move(id, above, task.Below)
+				m.updateTasks()
+				m.setCursor(c)
+			}
+			return nil
+		}
+	}
 	switch m.mode {
 	case modeRename:
 		if msg.Type == tea.KeyEnter {
@@ -152,6 +177,22 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			m.setCursor(m.cursor - 1)
 		case "i":
 			m.edit()
+		case "K":
+			id := getID(m.atCursor())
+			if m.moveSameParent(-1) {
+				m.store.Move(getID(m.atCursor()), id, task.Above)
+				m.updateTasks()
+			}
+		case "J":
+			c := m.cursor
+			id := getID(m.atCursor())
+			if m.moveSameParent(1) {
+				m.store.Move(id, getID(m.atCursor()), task.Above)
+				m.updateTasks()
+				m.setCursor(c)
+				m.moveSameParent(1)
+			}
+
 		case "O":
 			pos = task.Above
 			fallthrough
@@ -268,6 +309,7 @@ func (m app) viewTasks() string {
 		if bigspace {
 			s += "\n"
 		}
+		s += strings.Repeat("   ", len(path)-2)
 		s += ui.TaskIcon.Render(string(getIcon(t.Category)))
 		switch {
 		case m.mode == modeRename && m.cursor == i:
@@ -345,4 +387,48 @@ func (m *app) edit() {
 	name := m.store.Get(getID(m.atCursor())).Name
 	m.nameinput.SetValue(name)
 	m.nameinput.SetCursor(len(name) - 1)
+}
+
+// this is required to move tasks around
+// it needs to use the visible paths, otherwise it would be possible to
+// move a task to a place that is NOT ON THE SCREEN
+func (m *app) moveSameParent(inc int) bool {
+	if len(m.visible) == 0 {
+		return false
+	}
+	path := m.atCursor()
+	all := m.visible
+	i := m.cursor + inc
+	for i >= 0 && i < len(all) {
+		p := all[i]
+		// prevents from jumping to weird locations
+		if len(p) < len(path) {
+			return false
+		}
+		if len(p) == len(path) {
+			m.setCursor(i)
+			return true
+		}
+		i += inc
+	}
+	return false
+}
+
+// this is required to move tasks around
+// it needs to use the visible paths, otherwise it would be possible to
+// move a task to a place that is NOT ON THE SCREEN
+func (m *app) moveUpLeft() bool {
+	if len(m.visible) == 0 {
+		return false
+	}
+	path := m.visible[m.cursor]
+	before := m.visible[:m.cursor]
+	for i := len(before) - 1; i >= 0; i-- {
+		p := before[i]
+		if len(p) < len(path) {
+			m.setCursor(i)
+			return true
+		}
+	}
+	return false
 }
