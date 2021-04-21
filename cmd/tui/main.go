@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/td0m/taskman/internal/ui"
 	"github.com/td0m/taskman/pkg/task"
+	"github.com/td0m/taskman/pkg/task/date"
 )
 
 var icons = map[string]rune{
@@ -68,7 +70,7 @@ type mode int
 const (
 	modeNormal mode = iota
 	modeRename
-	modeDate
+	modeDue
 )
 
 type path []task.ID
@@ -127,6 +129,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handle keys differently based on the current mode
 func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
+	var cmd tea.Cmd
 	if m.mode == modeRename || m.mode == modeNormal {
 		if msg.Type == tea.KeyTab {
 			c := m.cursor
@@ -152,16 +155,28 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 	switch m.mode {
-	case modeRename:
+	case modeRename, modeDue:
 		if msg.Type == tea.KeyEnter {
-			err := m.store.Rename(getID(m.atCursor()), m.nameinput.Value())
-			check(err)
-			m.mode = modeNormal
+			switch m.mode {
+			case modeRename:
+				err := m.store.Rename(getID(m.atCursor()), m.nameinput.Value())
+				check(err)
+				m.mode = modeNormal
+			case modeDue:
+				d, err := date.ParseDate(m.nameinput.Value())
+				if err == nil {
+					ds := []date.RepeatableDate{d}
+					if m.nameinput.Value() == "" {
+						ds = []date.RepeatableDate{}
+					}
+					check(m.store.SetDue(getID(m.atCursor()), ds, m.now()))
+					m.mode = modeNormal
+				}
+			}
 		} else {
-			var cmd tea.Cmd
 			m.nameinput, cmd = m.nameinput.Update(msg)
-			return cmd
 		}
+		m.nameinput.Width = len(m.nameinput.Value()) + 1
 	case modeNormal:
 		var pos task.Pos = task.Below
 		switch msg.String() {
@@ -176,7 +191,13 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		case "k":
 			m.setCursor(m.cursor - 1)
 		case "i":
-			m.edit()
+			if getID(m.atCursor()) != "" {
+				m.edit()
+			}
+		case "d":
+			if getID(m.atCursor()) != "" {
+				m.editDue()
+			}
 		case "K":
 			id := getID(m.atCursor())
 			if m.moveSameParent(-1) {
@@ -192,7 +213,6 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 				m.setCursor(c)
 				m.moveSameParent(1)
 			}
-
 		case "O":
 			pos = task.Above
 			fallthrough
@@ -209,7 +229,7 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			m.edit()
 		}
 	}
-	return nil
+	return cmd
 }
 
 func (m app) now() time.Time {
@@ -317,6 +337,10 @@ func (m app) viewTasks() string {
 		default:
 			s += title.Render(t.Name)
 		}
+		due := m.store.NextDue(id)
+		if due != nil {
+			s += ui.TaskDivider + formatDate(*due)
+		}
 		s += "\n"
 	}
 	return s
@@ -332,7 +356,19 @@ func getIcon(category string) rune {
 // View renders the program's UI, which is just a string. The view is
 // rendered after every Update.
 func (m app) View() string {
-	return m.tabs.View() + m.viewport.View() + "\n" + "-"
+	statusline := ""
+	if m.mode == modeDue {
+		status := "✗"
+		if d, err := date.ParseDate(m.nameinput.Value()); err == nil {
+			status = "✓"
+			if m.nameinput.Value() != "" {
+				next := d.Next(m.now())
+				status += " " + formatDate(next)
+			}
+		}
+		statusline += m.nameinput.View() + status
+	}
+	return m.tabs.View() + m.viewport.View() + "\n" + statusline
 }
 
 func clamp(v, low, high int) int {
@@ -386,7 +422,14 @@ func (m *app) edit() {
 	m.mode = modeRename
 	name := m.store.Get(getID(m.atCursor())).Name
 	m.nameinput.SetValue(name)
+	m.nameinput.Width = len(m.nameinput.Value()) + 1
 	m.nameinput.SetCursor(len(name) - 1)
+}
+
+func (m *app) editDue() {
+	m.mode = modeDue
+	m.nameinput.SetValue("")
+	m.nameinput.Width = len(m.nameinput.Value()) + 1
 }
 
 // this is required to move tasks around
@@ -431,4 +474,24 @@ func (m *app) moveUpLeft() bool {
 		}
 	}
 	return false
+}
+
+func formatDate(t time.Time) string {
+	now := time.Now().Truncate(time.Hour * 24)
+	diff := t.Sub(now)
+	switch days := int(diff.Hours()) / 24; {
+	case days < 14:
+		return strconv.Itoa(days) + " days"
+	// max 1 month
+	case days <= 31:
+		return strconv.Itoa(days/7) + " weeks"
+	// months
+	default:
+		postfix := ""
+		months := days / 31
+		if months > 1 {
+			postfix = "s"
+		}
+		return strconv.Itoa(months) + " month" + postfix
+	}
 }
