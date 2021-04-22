@@ -1,6 +1,8 @@
 package date
 
 import (
+	"encoding/json"
+	"log"
 	"time"
 )
 
@@ -25,6 +27,37 @@ type dayMonth struct {
 type RepeatableDate struct {
 	Type  PeriodType
 	Value interface{}
+}
+
+// TODO: test for unmarshal
+func (r *RepeatableDate) UnmarshalJSON(bs []byte) error {
+	type alias RepeatableDate
+	var out alias
+	if err := json.Unmarshal(bs, &out); err != nil {
+		return err
+	}
+	r.Type = out.Type
+	switch r.Type {
+	case Once:
+		var err error
+		r.Value, err = time.Parse(time.RFC3339, out.Value.(string))
+		return err
+	case DayOffset, DayOfTheMonth:
+		r.Value = int(out.Value.(float64))
+		return nil
+	case Weekday:
+		r.Value = time.Weekday(out.Value.(float64))
+		return nil
+	case OnceAYear:
+		m := out.Value.(map[string]interface{})
+		r.Value = dayMonth{Day: int(m["Day"].(float64)), Month: time.Month(m["Month"].(float64))}
+		return nil
+	}
+	switch v := out.Value.(type) {
+	default:
+		log.Panicf("%+v", v)
+	}
+	return nil
 }
 
 func NewOnce(t time.Time) RepeatableDate {
