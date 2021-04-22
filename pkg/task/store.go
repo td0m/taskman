@@ -155,8 +155,54 @@ func (s *Store) recalculateDue(id ID, t time.Time) error {
 	return nil
 }
 
-func (s *Store) Do(_ ID, _ time.Time) error {
-	panic("not implemented") // TODO: Implement
+func (s *Store) Do(id ID, at time.Time) error {
+	if err := s.do(id, at); err != nil {
+		return err
+	}
+	t := s.Nodes[id]
+	if t.Repeats {
+		t.DueChanged = &at
+		s.Nodes[id] = t
+	}
+	return s.propagateDoneUp(id, at)
+}
+
+func (s *Store) propagateDoneUp(id ID, at time.Time) error {
+	parentID, ok := s.Parent[id]
+	// no parent or root
+	if !ok || parentID == "root" {
+		return nil
+	}
+	if !s.allDone(s.Children[parentID]) {
+		return nil
+	}
+	return s.Do(parentID, at)
+}
+
+func (s *Store) allDone(ids []ID) bool {
+	for _, id := range ids {
+		if !s.Nodes[id].Done() {
+			return false
+		}
+	}
+	return true
+}
+
+// we don't need to propagate when we update children too
+// if we did this would be a disaster to the performance
+func (s *Store) do(id ID, at time.Time) error {
+	t, ok := s.Nodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	t.DoneHistory = append(t.DoneHistory, at)
+	s.Nodes[id] = t
+	for _, c := range s.Children[id] {
+		if err := s.do(c, at); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) UnDo(_ ID) error {

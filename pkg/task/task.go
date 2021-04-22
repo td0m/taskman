@@ -69,14 +69,22 @@ func (t Info) NextDue() *time.Time {
 	return &earliest
 }
 
+func (t Info) LastDone() *time.Time {
+	all := t.DoneHistory
+	if len(all) == 0 {
+		return nil
+	}
+	return &all[len(all)-1]
+}
+
+func (t Info) Done() bool {
+	return !(t.Repeats || t.LastDone() == nil)
+}
+
 type Task struct {
 	Info
 	Parent   *Task
 	Children []*Task
-}
-
-func (t Task) Done() bool {
-	panic("unimplemented")
 }
 
 type ClockIn struct {

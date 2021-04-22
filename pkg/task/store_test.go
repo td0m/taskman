@@ -8,6 +8,36 @@ import (
 	"github.com/td0m/taskman/pkg/task/date"
 )
 
+// dfs is a depth-first-search traversal utility
+// it is used to compare trees
+func dfs(t *Task) []Task {
+	out := []Task{*t}
+	for _, child := range t.Children {
+		out = append(out, dfs(child)...)
+	}
+	return out
+}
+
+func setup() StoreManager {
+	var s StoreManager = NewStore()
+	time := time.Time{}
+	s.Create("foo", time)
+	s.Create("foo1", time)
+	s.Create("foo1.1", time)
+	s.Create("foo1.1.1", time)
+	s.Create("foo2", time)
+
+	s.Create("daily routine", time)
+	s.SetDue("daily routine", []date.RepeatableDate{date.NewDayOffset(1)}, time)
+	s.SetRepeats("daily routine", true)
+
+	s.Move("foo1", "foo", Into)
+	s.Move("foo1.1", "foo1", Into)
+	s.Move("foo1.1.1", "foo1.1", Into)
+	s.Move("foo2", "foo", Into)
+	return s
+}
+
 func TestStore_Create(t *testing.T) {
 	is := is.New(t)
 
@@ -98,6 +128,7 @@ func TestStore_Move(t *testing.T) {
 		err := s.Move("root2", "root", Below)
 		is.True(err != nil)
 	})
+	// TODO: test that moving applies rules for: category, repeats, and done
 }
 
 func TestStore_SetDue(t *testing.T) {
@@ -209,12 +240,70 @@ func TestStore_SetRepeats(t *testing.T) {
 	})
 }
 
-// dfs is a depth-first-search traversal utility
-// it is used to compare trees
-func dfs(t *Task) []Task {
-	out := []Task{*t}
-	for _, child := range t.Children {
-		out = append(out, dfs(child)...)
-	}
-	return out
+func TestStore_Do(t *testing.T) {
+	t.Run("throws error if id not found", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		err := s.Do("bar", time.Time{})
+		is.Equal(err, ErrNotFound)
+	})
+
+	t.Run("completing a task with children completes of all of its children", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		at := time.Time{}.AddDate(5, 6, 7)
+		err := s.Do("foo", at)
+		is.NoErr(err)
+		fooAndChildren := dfs(s.Root().Children[0])
+		for _, c := range fooAndChildren {
+			doneAt := c.LastDone()
+			if doneAt == nil {
+				t.Fatal("not done")
+			}
+			is.Equal(*doneAt, at)
+		}
+	})
+
+	t.Run("completing all children makes the parent complete", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+
+		is.NoErr(s.Do("foo1", time.Time{}))
+		is.NoErr(s.Do("foo2", time.Time{}))
+		lastDone := s.Get("foo").LastDone()
+		if lastDone == nil {
+			t.Fatal("not done")
+		}
+		is.Equal(time.Time{}, *lastDone)
+	})
+	t.Run("completing all children makes the parent complete recursively", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.NoErr(s.Do("foo2", time.Time{}))
+		is.Equal(s.Get("foo").LastDone(), nil)
+		is.NoErr(s.Do("foo1.1", time.Time{}))
+		lastDone := s.Get("foo").LastDone()
+		if lastDone == nil {
+			t.Fatal("not done")
+		}
+		is.Equal(*lastDone, time.Time{})
+	})
+
+	t.Run("fails to do an already done task", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.True(s.Do("bar", time.Time{}) != nil)
+	})
+
+	t.Run("computes the next repeating date for a repeatable task", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		err := s.Do("daily routine", time.Time{}.AddDate(0, 0, 3))
+		is.NoErr(err)
+		nextDue := s.Get("daily routine").NextDue()
+		if nextDue == nil {
+			t.Fatal("expected a new due")
+		}
+		is.Equal(*nextDue, time.Time{}.AddDate(0, 0, 4))
+	})
 }
