@@ -132,6 +132,45 @@ func TestStore_SetDue(t *testing.T) {
 	})
 }
 
+func TestStore_SetCategory(t *testing.T) {
+	is := is.New(t)
+	var s StoreManager = NewStore()
+	time := time.Time{}
+	s.Create("foo", time)
+	s.Create("foo1", time)
+	s.Create("foo1.1", time)
+	s.Create("foo1.1.1", time)
+	s.Create("foo2", time)
+
+	s.Move("foo1", "foo", Into)
+	s.Move("foo1.1", "foo1", Into)
+	s.Move("foo1.1.1", "foo1.1", Into)
+	s.Move("foo2", "foo", Into)
+
+	t.Run("throws error if id not found", func(t *testing.T) {
+		is := is.New(t)
+		err := s.SetCategory("bar", "category")
+		is.Equal(err, ErrNotFound)
+	})
+	t.Run("fails to set category of root", func(t *testing.T) {
+		is := is.New(t)
+		err := s.SetCategory("root", "category")
+		is.True(err != nil)
+	})
+	t.Run("sets category of item and all of its children", func(t *testing.T) {
+		is := is.New(t)
+		err := s.SetCategory("foo", "bar")
+		fooAndChildren := dfs(s.Root().Children[0])
+		for _, t := range fooAndChildren {
+			is.Equal(t.Category, "bar")
+		}
+		is.NoErr(err)
+	})
+}
+
+	})
+}
+
 // dfs is a depth-first-search traversal utility
 // it is used to compare trees
 func dfs(t *Task) []Task {

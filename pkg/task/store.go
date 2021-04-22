@@ -133,8 +133,22 @@ func (s *Store) Rename(id ID, name string) error {
 	return nil
 }
 
-func (s *Store) SetCategory(_ ID, _ string) error {
-	panic("not implemented") // TODO: Implement
+func (s *Store) SetCategory(id ID, category string) error {
+	t, ok := s.Nodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if _, parentFound := s.Parent[id]; !parentFound {
+		return errors.New("cannot set category of root")
+	}
+	t.Category = category
+	s.Nodes[id] = t
+	for _, c := range s.Children[id] {
+		if err := s.SetCategory(c, category); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) recalculateDue(id ID, t time.Time) error {
