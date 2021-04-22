@@ -83,6 +83,7 @@ const (
 	modeRename
 	modeDue
 	modeCategory
+	modeClockIn
 )
 
 type predicate func(task.Info) bool
@@ -98,6 +99,7 @@ type app struct {
 	time         time.Time
 	timeSetAt    time.Time
 	tabChangedAt time.Time
+	clockedInAt  time.Time
 
 	cursor     int
 	visible    []task.ID
@@ -177,6 +179,10 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 	switch m.mode {
+	case modeClockIn:
+		if msg.Type == tea.KeyEnter || msg.String() == " " {
+			m.clockOut()
+		}
 	case modeRename, modeDue, modeCategory:
 		if msg.Type == tea.KeyEnter {
 			switch m.mode {
@@ -205,6 +211,14 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 	case modeNormal:
 		var pos task.Pos = task.Below
 		switch msg.String() {
+		case "g":
+			m.setCursor(0)
+		case "G":
+			m.setCursor(len(m.visible))
+		case "ctrl+d":
+			m.setCursor(m.cursor + 10)
+		case "ctrl+u":
+			m.setCursor(m.cursor - 10)
 		case "alt+1":
 			m.setTab(0)
 		case "alt+2":
@@ -223,6 +237,8 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			if m.atCursor() != "" {
 				m.editDue()
 			}
+		case " ":
+			m.clockIn()
 		case "t":
 			id := m.atCursor()
 			check(m.store.Do(id, m.now()))
@@ -288,7 +304,10 @@ func (m *app) setTab(i int) {
 
 // updateTasks triggers a rerender of the viewport with all the tasks
 func (m *app) updateTasks() {
-	m.visible = filter(m.store, "root", m.predicates[m.tabs.Value()])
+	predicate := func(i task.Info) bool {
+		return m.tabChangedAt.Before(i.Created) || m.predicates[m.tabs.Value()](i)
+	}
+	m.visible = filter(m.store, "root", predicate)
 	m.save()
 }
 
@@ -407,6 +426,10 @@ func (m app) viewTasks() string {
 		default:
 			s += title.Render(t.Name)
 		}
+		timeLogged := t.TimeLogged()
+		if timeLogged > time.Duration(0) {
+			s += formatDuration(timeLogged)
+		}
 		due := m.store.NextDue(id)
 		if due != nil {
 			s += ui.TaskDivider
@@ -431,7 +454,8 @@ func getIcon(category string) rune {
 // rendered after every Update.
 func (m app) View() string {
 	statusline := ""
-	if m.mode == modeDue {
+	switch m.mode {
+	case modeDue:
 		status := "✗"
 		if d, err := date.ParseDate(m.nameinput.Value()); err == nil {
 			status = "✓"
@@ -441,12 +465,14 @@ func (m app) View() string {
 			}
 		}
 		statusline += m.nameinput.View() + status
-	} else if m.mode == modeCategory {
+	case modeCategory:
 		status := "✗"
 		if icon, ok := icons[m.nameinput.Value()]; ok {
 			status = string(icon)
 		}
 		statusline += "category: " + m.nameinput.View() + status
+	case modeClockIn:
+		statusline += "clocked in: " + formatDuration(m.now().Sub(m.clockedInAt))
 	}
 	return m.tabs.View() + m.viewport.View() + "\n" + statusline
 }
@@ -579,4 +605,22 @@ func (m app) formatDate(t time.Time) string {
 		}
 		return strconv.Itoa(months) + " month" + postfix
 	}
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	style := ui.TaskTimer
+	bracket := lipgloss.NewStyle().Foreground(ui.Faded).Render
+	return bracket(" (") + style.Render(d.String()) + bracket(") ")
+}
+
+func (m *app) clockIn() {
+	m.mode = modeClockIn
+	m.clockedInAt = m.now()
+}
+
+func (m *app) clockOut() {
+	m.mode = modeNormal
+	check(m.store.Log(m.atCursor(), m.clockedInAt, m.now()))
+	m.save()
 }

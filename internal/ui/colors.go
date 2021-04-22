@@ -9,6 +9,7 @@ const (
 	Secondary = lipgloss.Color("#888")
 	Faded     = lipgloss.Color("#555")
 
+	Blue   = lipgloss.Color("#4db7ff")
 	Green  = lipgloss.Color("#00a352")
 	Red    = lipgloss.Color("#c42912")
 	Yellow = lipgloss.Color("#c4b810")

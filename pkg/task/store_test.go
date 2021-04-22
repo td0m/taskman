@@ -357,3 +357,29 @@ func TestStore_Delete(t *testing.T) {
 		})
 	})
 }
+
+func TestStore_Log(t *testing.T) {
+	t.Run("log invalid id fails", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.Equal(s.Log("bar", time.Time{}, time.Time{}), ErrNotFound)
+	})
+	t.Run("logs valid leaf node", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.Equal(len(s.Get("foo1.1.1").Logs), 0)
+		is.NoErr(s.Log("foo1.1.1", time.Time{}, time.Time{}.Add(time.Hour)))
+		is.Equal(len(s.Get("foo1.1.1").Logs), 1)
+	})
+	t.Run("fails to log when start >= end", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.True(s.Log("foo", time.Time{}.Add(time.Hour), time.Time{}) != nil)
+	})
+	t.Run("fails to log node with children", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.True(s.Log("foo", time.Time{}, time.Time{}.Add(time.Hour)) != nil)
+	})
+
+}

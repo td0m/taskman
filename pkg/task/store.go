@@ -31,7 +31,7 @@ type StoreManager interface {
 	SetDue(ID, []date.RepeatableDate, time.Time) error
 	SetRepeats(ID, bool) error
 
-	Clock(ID, time.Time, time.Time) error
+	Log(ID, time.Time, time.Time) error
 
 	Move(target, anchor ID, pos Pos) error
 	Delete(ID) error
@@ -250,8 +250,18 @@ func (s *Store) SetRepeats(id ID, repeats bool) error {
 	return nil
 }
 
-func (s *Store) Clock(_ ID, _ time.Time, _ time.Time) error {
-	panic("not implemented") // TODO: Implement
+// we don't care about overlapping logs
+func (s *Store) Log(id ID, start time.Time, end time.Time) error {
+	t, ok := s.Nodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if len(s.Children[id]) > 0 {
+		return errors.New("cannot log a non-leaf task")
+	}
+	t.Logs = append(t.Logs, TimeLog{Start: start, End: end})
+	s.Nodes[id] = t
+	return nil
 }
 
 func (s *Store) detach(child ID) error {

@@ -36,7 +36,7 @@ type Info struct {
 	Due         []date.RepeatableDate
 	DueChanged  *time.Time
 	DoneHistory []time.Time
-	ClockIns    []ClockIn
+	Logs        []TimeLog
 	Category    string
 	Notes       string
 
@@ -81,13 +81,25 @@ func (t Info) Done() bool {
 	return !(t.Repeats || t.LastDone() == nil)
 }
 
+func (t Info) TimeLogged() time.Duration {
+	var d time.Duration = 0
+	for _, l := range t.Logs {
+		d += l.Duration()
+	}
+	return d
+}
+
 type Task struct {
 	Info
 	Parent   *Task
 	Children []*Task
 }
 
-type ClockIn struct {
+type TimeLog struct {
 	Start time.Time
 	End   time.Time
+}
+
+func (t TimeLog) Duration() time.Duration {
+	return t.End.Sub(t.Start)
 }

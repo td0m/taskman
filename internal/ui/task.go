@@ -10,4 +10,5 @@ var (
 	SubTaskTitle = lipgloss.NewStyle().Foreground(Secondary)
 
 	TaskDivider = lipgloss.NewStyle().Foreground(Faded).Padding(0, 1).Render("∙")
+	TaskTimer   = lipgloss.NewStyle().Foreground(Blue)
 )
