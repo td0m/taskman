@@ -160,10 +160,20 @@ func (s *Store) Do(id ID, at time.Time) error {
 	}
 	t := s.Nodes[id]
 	if t.Repeats {
+		if at.Before(*t.NextDue()) {
+			return errors.New("cannot complete repeatable task before its due date")
+		}
 		t.DueChanged = &at
 		s.Nodes[id] = t
 	}
 	return s.propagateDoneUp(id, at)
+}
+
+func max(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 func (s *Store) propagateDoneUp(id ID, at time.Time) error {

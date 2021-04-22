@@ -48,7 +48,12 @@ func main() {
 	}
 
 	a.predicates = []predicate{
-		func(t task.Info) bool { return true },
+		func(t task.Info) bool {
+			if t.Repeats && a.now().Before(*t.NextDue()) {
+				return false
+			}
+			return true
+		},
 		func(t task.Info) bool {
 			due := t.NextDue()
 			return due != nil && due.Before(a.now())

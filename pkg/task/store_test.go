@@ -31,6 +31,10 @@ func setup() StoreManager {
 	s.SetDue("daily routine", []date.RepeatableDate{date.NewDayOffset(1)}, time)
 	s.SetRepeats("daily routine", true)
 
+	s.Create("weekly routine", time)
+	s.SetDue("weekly routine", []date.RepeatableDate{date.NewDayOffset(7)}, time)
+	s.SetRepeats("weekly routine", true)
+
 	s.Move("foo1", "foo", Into)
 	s.Move("foo1.1", "foo1", Into)
 	s.Move("foo1.1.1", "foo1.1", Into)
@@ -315,6 +319,20 @@ func TestStore_Do(t *testing.T) {
 			t.Fatal("expected a new due")
 		}
 		is.Equal(*nextDue, time.Time{}.AddDate(0, 0, 4))
+
+		err = s.Do("daily routine", time.Time{}.AddDate(0, 0, 8))
+		is.NoErr(err)
+		nextDue = s.Get("daily routine").NextDue()
+		if nextDue == nil {
+			t.Fatal("expected a new due")
+		}
+		is.Equal(*nextDue, time.Time{}.AddDate(0, 0, 9))
+	})
+	t.Run("cannot complete repeating task IF the deadline hasn't been reached yet", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		err := s.Do("weekly routine", time.Time{}.AddDate(0, 0, 3))
+		is.True(err != nil)
 	})
 }
 
