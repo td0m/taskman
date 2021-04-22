@@ -175,7 +175,13 @@ func (s *Store) propagateDoneUp(id ID, at time.Time) error {
 	if !s.allDone(s.Children[parentID]) {
 		return nil
 	}
-	return s.Do(parentID, at)
+	t := s.Nodes[parentID]
+	if !t.Done() {
+		t.DoneHistory = append(t.DoneHistory, at)
+		s.Nodes[parentID] = t
+		return s.propagateDoneUp(parentID, at)
+	}
+	return nil
 }
 
 func (s *Store) allDone(ids []ID) bool {
@@ -193,6 +199,9 @@ func (s *Store) do(id ID, at time.Time) error {
 	t, ok := s.Nodes[id]
 	if !ok {
 		return ErrNotFound
+	}
+	if t.Done() {
+		return errors.New("task already done")
 	}
 	t.DoneHistory = append(t.DoneHistory, at)
 	s.Nodes[id] = t
