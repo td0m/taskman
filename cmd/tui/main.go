@@ -218,6 +218,7 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		case "t":
 			id := getID(m.atCursor())
 			check(m.store.Do(id, m.now()))
+			m.save()
 		case tea.KeyDelete.String():
 			id := getID(m.atCursor())
 			check(m.store.Delete(id))
@@ -227,6 +228,7 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			id := getID(m.atCursor())
 			t := m.store.Get(id)
 			m.store.SetRepeats(id, !t.Repeats)
+			m.save()
 		case "c":
 			m.editCategory()
 		case "K":
@@ -272,6 +274,7 @@ func (m *app) updateTasks() {
 	m.visible = traverse(m.store, "root")[1:]
 
 	m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
+	m.save()
 }
 
 func (m *app) save() {
