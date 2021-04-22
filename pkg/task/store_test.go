@@ -168,6 +168,44 @@ func TestStore_SetCategory(t *testing.T) {
 	})
 }
 
+func TestStore_SetRepeats(t *testing.T) {
+	is := is.New(t)
+	var s StoreManager = NewStore()
+	time := time.Time{}
+	s.Create("foo", time)
+	s.Create("foo1", time)
+	s.Create("foo1.1", time)
+	s.Create("foo1.1.1", time)
+	s.Create("foo2", time)
+
+	s.Move("foo1", "foo", Into)
+	s.Move("foo1.1", "foo1", Into)
+	s.Move("foo1.1.1", "foo1.1", Into)
+	s.Move("foo2", "foo", Into)
+
+	t.Run("throws error if id not found", func(t *testing.T) {
+		is := is.New(t)
+		err := s.SetRepeats("bar", true)
+		is.Equal(err, ErrNotFound)
+	})
+	t.Run("fails to repeat root", func(t *testing.T) {
+		is := is.New(t)
+		err := s.SetRepeats("bar", true)
+		is.True(err != nil)
+	})
+	t.Run("repeats any direct children of root", func(t *testing.T) {
+		is := is.New(t)
+		is.Equal(s.Get("foo").Repeats, false)
+		err := s.SetRepeats("foo", true)
+		is.NoErr(err)
+		is.Equal(s.Get("foo").Repeats, true)
+	})
+	t.Run("cannot repeat any children that are not direct descendants of root", func(t *testing.T) {
+		is := is.New(t)
+		err := s.SetRepeats("foo1.1", true)
+		is.True(err != nil)
+		err = s.SetRepeats("foo1.1.1", true)
+		is.True(err != nil)
 	})
 }
 

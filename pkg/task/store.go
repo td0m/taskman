@@ -176,8 +176,18 @@ func (s *Store) SetDue(id ID, due []date.RepeatableDate, time time.Time) error {
 	return s.recalculateDue(id, time)
 }
 
-func (s *Store) SetRepeats(_ ID, _ bool) error {
-	panic("not implemented") // TODO: Implement
+func (s *Store) SetRepeats(id ID, repeats bool) error {
+	node, ok := s.Nodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	p := s.Parent[id]
+	if p != "root" {
+		return errors.New("cannot repeat any non direct descendants of root")
+	}
+	node.Repeats = repeats
+	s.Nodes[id] = node
+	return nil
 }
 
 func (s *Store) Clock(_ ID, _ time.Time, _ time.Time) error {
