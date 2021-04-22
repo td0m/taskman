@@ -175,7 +175,6 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			case modeRename:
 				err := m.store.Rename(getID(m.atCursor()), m.nameinput.Value())
 				check(err)
-				m.mode = modeNormal
 			case modeDue:
 				d, err := date.ParseDate(m.nameinput.Value())
 				if err == nil {
@@ -184,13 +183,13 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 						ds = []date.RepeatableDate{}
 					}
 					check(m.store.SetDue(getID(m.atCursor()), ds, m.now()))
-					m.mode = modeNormal
 				}
 			case modeCategory:
 				err := m.store.SetCategory(getID(m.atCursor()), m.nameinput.Value())
 				check(err)
-				m.mode = modeNormal
 			}
+			m.mode = modeNormal
+			m.save()
 		} else {
 			m.nameinput, cmd = m.nameinput.Update(msg)
 		}
@@ -273,7 +272,9 @@ func (m *app) updateTasks() {
 	m.visible = traverse(m.store, "root")[1:]
 
 	m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
+}
 
+func (m *app) save() {
 	check(m.persist.Save(m.store))
 }
 
