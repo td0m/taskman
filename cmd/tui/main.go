@@ -71,6 +71,7 @@ const (
 	modeNormal mode = iota
 	modeRename
 	modeDue
+	modeCategory
 )
 
 type path []task.ID
@@ -155,7 +156,7 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 	switch m.mode {
-	case modeRename, modeDue:
+	case modeRename, modeDue, modeCategory:
 		if msg.Type == tea.KeyEnter {
 			switch m.mode {
 			case modeRename:
@@ -172,6 +173,10 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 					check(m.store.SetDue(getID(m.atCursor()), ds, m.now()))
 					m.mode = modeNormal
 				}
+			case modeCategory:
+				err := m.store.SetCategory(getID(m.atCursor()), m.nameinput.Value())
+				check(err)
+				m.mode = modeNormal
 			}
 		} else {
 			m.nameinput, cmd = m.nameinput.Update(msg)
@@ -198,6 +203,12 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			if getID(m.atCursor()) != "" {
 				m.editDue()
 			}
+		case "r":
+			id := getID(m.atCursor())
+			t := m.store.Get(id)
+			m.store.SetRepeats(id, !t.Repeats)
+		case "c":
+			m.editCategory()
 		case "K":
 			id := getID(m.atCursor())
 			if m.moveSameParent(-1) {
@@ -339,7 +350,11 @@ func (m app) viewTasks() string {
 		}
 		due := m.store.NextDue(id)
 		if due != nil {
-			s += ui.TaskDivider + formatDate(*due)
+			s += ui.TaskDivider
+			s += formatDate(*due)
+			if t.Repeats {
+				s += lipgloss.NewStyle().Padding(0, 1, 0, 1).Foreground(ui.Faded).Render("⭮")
+			}
 		}
 		s += "\n"
 	}
@@ -367,6 +382,12 @@ func (m app) View() string {
 			}
 		}
 		statusline += m.nameinput.View() + status
+	} else if m.mode == modeCategory {
+		status := "✗"
+		if icon, ok := icons[m.nameinput.Value()]; ok {
+			status = string(icon)
+		}
+		statusline += "category: " + m.nameinput.View() + status
 	}
 	return m.tabs.View() + m.viewport.View() + "\n" + statusline
 }
@@ -429,6 +450,12 @@ func (m *app) edit() {
 func (m *app) editDue() {
 	m.mode = modeDue
 	m.nameinput.SetValue("")
+	m.nameinput.Width = len(m.nameinput.Value()) + 1
+}
+
+func (m *app) editCategory() {
+	m.mode = modeCategory
+	m.nameinput.SetValue(m.store.Get(getID(m.atCursor())).Category)
 	m.nameinput.Width = len(m.nameinput.Value()) + 1
 }
 
