@@ -203,6 +203,14 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			if getID(m.atCursor()) != "" {
 				m.editDue()
 			}
+		case "t":
+			id := getID(m.atCursor())
+			check(m.store.Do(id, m.now()))
+		case tea.KeyDelete.String():
+			id := getID(m.atCursor())
+			check(m.store.Delete(id))
+			m.updateTasks()
+			m.setCursor(m.cursor) // make sure cursor is visible
 		case "r":
 			id := getID(m.atCursor())
 			t := m.store.Get(id)
@@ -321,6 +329,7 @@ func (m app) viewTasks() string {
 	for i, path := range m.visible {
 		var (
 			bigspace bool
+			icon     rune           = '∙'
 			title    lipgloss.Style = ui.TaskTitle
 		)
 		id := getID(path)
@@ -328,6 +337,7 @@ func (m app) viewTasks() string {
 
 		// style differences
 		if m.store.GetParent(id) == "root" {
+			icon = getIcon(t.Category)
 			bigspace = true
 		} else {
 			title = ui.SubTaskTitle
@@ -335,13 +345,16 @@ func (m app) viewTasks() string {
 		if i == m.cursor {
 			title = title.Copy().Background(ui.Faded)
 		}
+		if t.Done() {
+			title = title.Copy().Strikethrough(true)
+		}
 
 		// renderer
 		if bigspace {
 			s += "\n"
 		}
 		s += strings.Repeat("   ", len(path)-2)
-		s += ui.TaskIcon.Render(string(getIcon(t.Category)))
+		s += ui.TaskIcon.Render(string(icon))
 		switch {
 		case m.mode == modeRename && m.cursor == i:
 			s += m.nameinput.View()
