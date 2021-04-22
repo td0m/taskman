@@ -39,7 +39,7 @@ func main() {
 	a := &app{
 		nameinput: i,
 		viewport:  viewport.Model{},
-		tabs:      ui.NewTabs([]string{"Outline", "Today"}),
+		tabs:      ui.NewTabs([]string{"Outline", "Today", "Habits"}),
 		time:      time.Now(),
 		timeSetAt: time.Now(),
 
@@ -56,7 +56,10 @@ func main() {
 		},
 		func(t task.Info) bool {
 			due := t.NextDue()
-			return due != nil && due.Before(a.now())
+			return due != nil && due.Before(startOfDay(a.now().Add(time.Hour*24))) && !t.Done()
+		},
+		func(t task.Info) bool {
+			return t.Repeats
 		},
 	}
 	p := tea.NewProgram(a)
@@ -82,8 +85,6 @@ const (
 	modeCategory
 )
 
-type path []task.ID
-
 type predicate func(task.Info) bool
 
 type app struct {
@@ -94,11 +95,12 @@ type app struct {
 	nameinput textinput.Model
 	tabs      ui.Tabs
 
-	time      time.Time
-	timeSetAt time.Time
+	time         time.Time
+	timeSetAt    time.Time
+	tabChangedAt time.Time
 
 	cursor     int
-	visible    []path
+	visible    []task.ID
 	predicates []predicate
 
 	store   task.StoreManager
@@ -128,6 +130,7 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var err error
 			m.store, err = m.persist.Load()
 			check(err)
+			m.setTab(0) // needed to update tabLastChanged so that not all tasks are displayed
 			m.updateTasks()
 		}
 		m.loaded = true
@@ -152,9 +155,9 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 	if m.mode == modeRename || m.mode == modeNormal {
 		if msg.Type == tea.KeyTab {
 			c := m.cursor
-			id := getID(m.atCursor())
+			id := m.atCursor()
 			if m.moveSameParent(-1) {
-				above := getID(m.atCursor())
+				above := m.atCursor()
 				m.store.Move(id, above, task.Into)
 				m.updateTasks()
 				m.setCursor(c)
@@ -163,9 +166,9 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		}
 		if msg.Type == tea.KeyShiftTab {
 			c := m.cursor
-			id := getID(m.atCursor())
+			id := m.atCursor()
 			if m.moveUpLeft() {
-				above := getID(m.atCursor())
+				above := m.atCursor()
 				m.store.Move(id, above, task.Below)
 				m.updateTasks()
 				m.setCursor(c)
@@ -178,7 +181,7 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		if msg.Type == tea.KeyEnter {
 			switch m.mode {
 			case modeRename:
-				err := m.store.Rename(getID(m.atCursor()), m.nameinput.Value())
+				err := m.store.Rename(m.atCursor(), m.nameinput.Value())
 				check(err)
 			case modeDue:
 				d, err := date.ParseDate(m.nameinput.Value())
@@ -187,10 +190,10 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 					if m.nameinput.Value() == "" {
 						ds = []date.RepeatableDate{}
 					}
-					check(m.store.SetDue(getID(m.atCursor()), ds, m.now()))
+					check(m.store.SetDue(m.atCursor(), ds, m.now()))
 				}
 			case modeCategory:
-				err := m.store.SetCategory(getID(m.atCursor()), m.nameinput.Value())
+				err := m.store.SetCategory(m.atCursor(), m.nameinput.Value())
 				check(err)
 			}
 			m.mode = modeNormal
@@ -203,50 +206,50 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		var pos task.Pos = task.Below
 		switch msg.String() {
 		case "alt+1":
-			m.tabs.Set(0)
-			m.updateTasks()
+			m.setTab(0)
 		case "alt+2":
-			m.tabs.Set(1)
-			m.updateTasks()
+			m.setTab(1)
+		case "alt+3":
+			m.setTab(2)
 		case "j":
 			m.setCursor(m.cursor + 1)
 		case "k":
 			m.setCursor(m.cursor - 1)
 		case "i":
-			if getID(m.atCursor()) != "" {
+			if m.atCursor() != "" {
 				m.edit()
 			}
 		case "d":
-			if getID(m.atCursor()) != "" {
+			if m.atCursor() != "" {
 				m.editDue()
 			}
 		case "t":
-			id := getID(m.atCursor())
+			id := m.atCursor()
 			check(m.store.Do(id, m.now()))
 			m.save()
 		case tea.KeyDelete.String():
-			id := getID(m.atCursor())
+			id := m.atCursor()
 			check(m.store.Delete(id))
 			m.updateTasks()
 			m.setCursor(m.cursor) // make sure cursor is visible
 		case "r":
-			id := getID(m.atCursor())
+			id := m.atCursor()
 			t := m.store.Get(id)
 			m.store.SetRepeats(id, !t.Repeats)
 			m.save()
 		case "c":
 			m.editCategory()
 		case "K":
-			id := getID(m.atCursor())
+			id := m.atCursor()
 			if m.moveSameParent(-1) {
-				m.store.Move(getID(m.atCursor()), id, task.Above)
+				m.store.Move(m.atCursor(), id, task.Above)
 				m.updateTasks()
 			}
 		case "J":
 			c := m.cursor
-			id := getID(m.atCursor())
+			id := m.atCursor()
 			if m.moveSameParent(1) {
-				m.store.Move(id, getID(m.atCursor()), task.Above)
+				m.store.Move(id, m.atCursor(), task.Above)
 				m.updateTasks()
 				m.setCursor(c)
 				m.moveSameParent(1)
@@ -255,7 +258,7 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 			pos = task.Above
 			fallthrough
 		case "o":
-			focused := getID(m.atCursor())
+			focused := m.atCursor()
 			id := task.RandomID()
 			check(m.store.Create(id, m.now()))
 			// we don't need to (and can't) move when there are no tasks yet
@@ -274,11 +277,18 @@ func (m app) now() time.Time {
 	return m.time.Add(time.Since(m.timeSetAt))
 }
 
+func (m *app) setTab(i int) {
+	m.tabs.Set(i)
+	m.tabChangedAt = m.now()
+
+	m.updateTasks()
+
+	m.setCursor(0)
+}
+
 // updateTasks triggers a rerender of the viewport with all the tasks
 func (m *app) updateTasks() {
-	m.visible = traverse(m.store, "root")[1:]
-
-	m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
+	m.visible = filter(m.store, "root", m.predicates[m.tabs.Value()])
 	m.save()
 }
 
@@ -286,23 +296,28 @@ func (m *app) save() {
 	check(m.persist.Save(m.store))
 }
 
-func (m *app) filter(paths []path, f predicate) []path {
-	arr := []path{}
-	// this makes sure that even if parent didn't pass the filter, it will still be displayed
-	pile := []path{}
-	for _, p := range paths {
-		if len(pile) > 0 && len(p) <= len(pile[len(pile)-1]) {
-			pile = []path{}
-		}
-		pile = append(pile, p)
-		t := m.store.Get(getID(p))
-		// still show those who have been created but don't meet the criteria
-		if m.tabs.LastChanged().Before(t.Created) || f(t) {
-			arr = append(arr, pile...)
-			pile = []path{}
-		}
+func filter(m task.StoreManager, id task.ID, f predicate) []task.ID {
+	out := []task.ID{}
+	for _, t := range m.GetChildren(id) {
+		out = append(out, dfs(m, t, f)...)
 	}
-	return arr
+	return out
+}
+
+// dfs is a depth-first-search traversal utility
+func dfs(store task.StoreManager, id task.ID, f predicate) []task.ID {
+	out := []task.ID{}
+	for _, child := range store.GetChildren(id) {
+		children := dfs(store, child, f)
+		out = append(out, children...)
+	}
+	if len(out) > 0 {
+		return append([]task.ID{id}, out...)
+	}
+	if f(store.Get(id)) {
+		return []task.ID{id}
+	}
+	return []task.ID{}
 }
 
 func (m *app) render() {
@@ -338,26 +353,33 @@ func (m *app) setCursor(value int) {
 
 func (m app) sizeOf(i int) int {
 	var (
-		currentPath = m.visible[i]
+		current = m.visible[i]
 	)
 	// rules for separating top level todos
-	if len(currentPath) == 2 {
+	if m.pathSize(current) == 2 {
 		return 2
 	}
 	return 1
+}
 
+func (m app) pathSize(id task.ID) int {
+	parent := m.store.GetParent(id)
+	if parent == "root" {
+		return 2
+	}
+	return 1 + m.pathSize(parent)
 }
 
 func (m app) viewTasks() string {
 	s := ""
-	for i, path := range m.visible {
+	for i, id := range m.visible {
 		var (
 			bigspace bool
 			icon     rune           = '∙'
 			title    lipgloss.Style = ui.TaskTitle
 		)
-		id := getID(path)
 		t := m.store.Get(id)
+		pathSize := m.pathSize(id)
 
 		// style differences
 		if m.store.GetParent(id) == "root" {
@@ -377,7 +399,7 @@ func (m app) viewTasks() string {
 		if bigspace {
 			s += "\n"
 		}
-		s += strings.Repeat("   ", len(path)-2)
+		s += strings.Repeat("   ", pathSize-2)
 		s += ui.TaskIcon.Render(string(icon))
 		switch {
 		case m.mode == modeRename && m.cursor == i:
@@ -388,7 +410,7 @@ func (m app) viewTasks() string {
 		due := m.store.NextDue(id)
 		if due != nil {
 			s += ui.TaskDivider
-			s += formatDate(*due)
+			s += lipgloss.NewStyle().Foreground(m.getColor(*due)).Render(m.formatDate(*due))
 			if t.Repeats {
 				s += lipgloss.NewStyle().Padding(0, 1, 0, 1).Foreground(ui.Faded).Render("⭮")
 			}
@@ -415,7 +437,7 @@ func (m app) View() string {
 			status = "✓"
 			if m.nameinput.Value() != "" {
 				next := d.Next(m.now())
-				status += " " + formatDate(next)
+				status += " " + m.formatDate(next)
 			}
 		}
 		statusline += m.nameinput.View() + status
@@ -447,38 +469,17 @@ func max(a, b int) int {
 	return b
 }
 
-func traverse(s task.StoreManager, id task.ID) []path {
-	all := []path{{id}}
-	if s.Get(id).Folded {
-		return all
-	}
-	for _, child := range s.GetChildren(id) {
-		childPaths := traverse(s, child)
-		for _, subp := range childPaths {
-			path := append([]task.ID{id}, subp...)
-			all = append(all, path)
-		}
-	}
-	return all
-}
-func (m app) atCursor() path {
+func (m app) atCursor() task.ID {
 	// if no items visible
 	if m.cursor >= len(m.visible) {
-		return []task.ID{}
+		return "root"
 	}
 	return m.visible[m.cursor]
 }
 
-func getID(path path) task.ID {
-	if len(path) < 1 {
-		return ""
-	}
-	return path[len(path)-1]
-}
-
 func (m *app) edit() {
 	m.mode = modeRename
-	name := m.store.Get(getID(m.atCursor())).Name
+	name := m.store.Get(m.atCursor()).Name
 	m.nameinput.SetValue(name)
 	m.nameinput.Width = len(m.nameinput.Value()) + 1
 	m.nameinput.SetCursor(len(name) - 1)
@@ -492,7 +493,7 @@ func (m *app) editDue() {
 
 func (m *app) editCategory() {
 	m.mode = modeCategory
-	m.nameinput.SetValue(m.store.Get(getID(m.atCursor())).Category)
+	m.nameinput.SetValue(m.store.Get(m.atCursor()).Category)
 	m.nameinput.Width = len(m.nameinput.Value()) + 1
 }
 
@@ -503,16 +504,16 @@ func (m *app) moveSameParent(inc int) bool {
 	if len(m.visible) == 0 {
 		return false
 	}
-	path := m.atCursor()
+	path := m.pathSize(m.atCursor())
 	all := m.visible
 	i := m.cursor + inc
 	for i >= 0 && i < len(all) {
-		p := all[i]
+		p := m.pathSize(all[i])
 		// prevents from jumping to weird locations
-		if len(p) < len(path) {
+		if p < path {
 			return false
 		}
-		if len(p) == len(path) {
+		if p == path {
 			m.setCursor(i)
 			return true
 		}
@@ -528,24 +529,44 @@ func (m *app) moveUpLeft() bool {
 	if len(m.visible) == 0 {
 		return false
 	}
-	path := m.visible[m.cursor]
+	path := m.pathSize(m.visible[m.cursor])
 	before := m.visible[:m.cursor]
 	for i := len(before) - 1; i >= 0; i-- {
-		p := before[i]
-		if len(p) < len(path) {
+		p := m.pathSize(before[i])
+		if p < path {
 			m.setCursor(i)
 			return true
 		}
 	}
 	return false
 }
+func (m app) getColor(t time.Time) lipgloss.Color {
+	diff := t.Sub(startOfDay(m.now()))
+	switch days := int(diff.Hours()) / 24; {
+	case days <= 2:
+		return ui.Red
+	case days <= 14:
+		return ui.Orange
+	default:
+		return ui.Faded
+	}
+}
 
-func formatDate(t time.Time) string {
-	now := time.Now().Truncate(time.Hour * 24)
+func startOfDay(t time.Time) time.Time {
+	year, month, day := t.Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, t.Location())
+}
+
+func (m app) formatDate(t time.Time) string {
+	now := m.now().Truncate(time.Hour * 24)
 	diff := t.Sub(now)
 	switch days := int(diff.Hours()) / 24; {
 	case days < 14:
-		return strconv.Itoa(days) + " days"
+		suffix := ""
+		if days > 1 {
+			suffix = "s"
+		}
+		return strconv.Itoa(days) + " day" + suffix
 	// max 1 month
 	case days <= 31:
 		return strconv.Itoa(days/7) + " weeks"

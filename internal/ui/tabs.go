@@ -2,7 +2,6 @@ package ui
 
 import (
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,8 +20,6 @@ type Tabs struct {
 
 	Width int
 	Info  string
-
-	lastChanged time.Time
 }
 
 // NewTabs creates a new tabs ui bubbletea model
@@ -33,6 +30,7 @@ func NewTabs(tabs []string) Tabs {
 // Init is the first function that will be called. It returns an optional
 // initial command. To not perform an initial command return nil.
 func (m Tabs) Init() tea.Cmd {
+	m.Set(0)
 	return nil
 }
 
@@ -65,13 +63,8 @@ func (m Tabs) Value() int {
 	return m.i
 }
 
-func (m Tabs) LastChanged() time.Time {
-	return m.lastChanged
-}
-
 func (m *Tabs) Set(i int) {
 	m.i = min(max(i, 0), len(m.tabs)-1)
-	m.lastChanged = time.Now()
 }
 
 func max(a, b int) int {
