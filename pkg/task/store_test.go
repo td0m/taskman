@@ -316,3 +316,25 @@ func TestStore_Do(t *testing.T) {
 		is.Equal(*nextDue, time.Time{}.AddDate(0, 0, 4))
 	})
 }
+
+func TestStore_Delete(t *testing.T) {
+	t.Run("fails to delete inexistent task", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.True(s.Delete("bar") != nil)
+	})
+	t.Run("deletes task and all of its children", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.True(s.GetChildren("root")[0] == "foo")
+		// try deleting twice, second delete SHOULD fail:
+		is.NoErr(s.Delete("foo"))
+		is.True(s.Delete("foo") != nil)
+		is.True(s.Delete("foo1") != nil)
+		is.True(s.Delete("foo1.1") != nil)
+		t.Run("deletes itself from parent", func(t *testing.T) {
+			is := is.New(t)
+			is.True(s.GetChildren("root")[0] != "foo")
+		})
+	})
+}

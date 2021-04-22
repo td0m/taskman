@@ -34,7 +34,7 @@ type StoreManager interface {
 	Clock(ID, time.Time, time.Time) error
 
 	Move(target, anchor ID, pos Pos) error
-	Archive(ID) error
+	Delete(ID) error
 
 	Root() *Task
 	Get(ID) Info
@@ -317,8 +317,44 @@ func (s *Store) checkTree(id ID) error {
 	return nil
 }
 
-func (s *Store) Archive(_ ID) error {
-	panic("not implemented") // TODO: Implement
+func (s *Store) Delete(id ID) error {
+	_, ok := s.Nodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if err := s.removeChild(id); err != nil {
+		return err
+	}
+	if err := s.delete(id); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) removeChild(id ID) error {
+	parent, ok := s.Parent[id]
+	if !ok {
+		return ErrNotFound
+	}
+	children := s.Children[parent]
+	for i, c := range children {
+		if c == id {
+			s.Children[parent] = append(children[:i], children[i+1:]...)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+func (s *Store) delete(id ID) error {
+	for _, c := range s.Children[id] {
+		if err := s.Delete(c); err != nil {
+			return err
+		}
+	}
+	delete(s.Parent, id)
+	delete(s.Children, id)
+	return nil
 }
 
 func (s *Store) get(id ID) *Task {
