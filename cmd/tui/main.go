@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/td0m/taskman/internal/ui"
+	"github.com/td0m/taskman/pkg/persist"
 	"github.com/td0m/taskman/pkg/task"
 	"github.com/td0m/taskman/pkg/task/date"
 )
@@ -39,9 +40,11 @@ func main() {
 		nameinput: i,
 		viewport:  viewport.Model{},
 		tabs:      ui.NewTabs([]string{"Outline", "Today"}),
-		store:     task.NewStore(),
 		time:      time.Now(),
 		timeSetAt: time.Now(),
+
+		store:   task.NewStore(),
+		persist: persist.InJSON("./tasks.json"),
 	}
 
 	a.predicates = []predicate{
@@ -79,7 +82,8 @@ type path []task.ID
 type predicate func(task.Info) bool
 
 type app struct {
-	mode mode
+	mode   mode
+	loaded bool
 
 	viewport  viewport.Model
 	nameinput textinput.Model
@@ -92,7 +96,8 @@ type app struct {
 	visible    []path
 	predicates []predicate
 
-	store task.StoreManager
+	store   task.StoreManager
+	persist *persist.JSON
 }
 
 // Init is the first function that will be called. It returns an optional
@@ -113,6 +118,14 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = msg.Width
 		m.viewport.Height = msg.Height - verticalMargins
 		m.tabs.Width = msg.Width
+
+		if !m.loaded {
+			var err error
+			m.store, err = m.persist.Load()
+			check(err)
+			m.updateTasks()
+		}
+		m.loaded = true
 		m.setCursor(m.cursor) // make sure cursor is visible
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -260,6 +273,8 @@ func (m *app) updateTasks() {
 	m.visible = traverse(m.store, "root")[1:]
 
 	m.visible = m.filter(m.visible, m.predicates[m.tabs.Value()])
+
+	check(m.persist.Save(m.store))
 }
 
 func (m *app) filter(paths []path, f predicate) []path {
