@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,16 @@ func check(err error) {
 	}
 }
 
+var (
+	filePath = flag.String("file", "./tasks.json", "Path to task file")
+)
+
 func main() {
+	flag.Parse()
+
+	persist, err := persist.InJSON(*filePath)
+	check(err)
+
 	i := textinput.NewModel()
 	i.Focus()
 	i.Prompt = ""
@@ -44,7 +54,7 @@ func main() {
 		timeSetAt: time.Now(),
 
 		store:   task.NewStore(),
-		persist: persist.InJSON("./tasks.json"),
+		persist: persist,
 	}
 
 	a.predicates = []predicate{
@@ -240,19 +250,22 @@ func (m *app) keyUpdate(msg tea.KeyMsg) tea.Cmd {
 		case " ":
 			m.clockIn()
 		case "t":
-			id := m.atCursor()
-			check(m.store.Do(id, m.now()))
-			m.save()
+			if id := m.atCursor(); id != "" {
+				check(m.store.Do(id, m.now()))
+				m.save()
+			}
 		case tea.KeyDelete.String():
-			id := m.atCursor()
-			check(m.store.Delete(id))
-			m.updateTasks()
-			m.setCursor(m.cursor) // make sure cursor is visible
+			if id := m.atCursor(); id != "" {
+				check(m.store.Delete(id))
+				m.updateTasks()
+				m.setCursor(m.cursor) // make sure cursor is visible
+			}
 		case "r":
-			id := m.atCursor()
-			t := m.store.Get(id)
-			m.store.SetRepeats(id, !t.Repeats)
-			m.save()
+			if id := m.atCursor(); id != "" {
+				t := m.store.Get(id)
+				m.store.SetRepeats(id, !t.Repeats)
+				m.save()
+			}
 		case "c":
 			m.editCategory()
 		case "K":
@@ -498,7 +511,7 @@ func max(a, b int) int {
 func (m app) atCursor() task.ID {
 	// if no items visible
 	if m.cursor >= len(m.visible) {
-		return "root"
+		return ""
 	}
 	return m.visible[m.cursor]
 }

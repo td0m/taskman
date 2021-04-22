@@ -16,7 +16,8 @@ func main() {
 	perDay := 30
 	total := 365 * perDay * years
 	file := path.Join(os.TempDir(), "tasks.json")
-	p := persist.InJSON(file)
+	p, err := persist.InJSON(file)
+	check(err)
 	s := task.NewStore()
 	for i := 0; i < total; i++ {
 		id := task.RandomID()

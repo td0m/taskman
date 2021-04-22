@@ -37,7 +37,8 @@ func TestJSON_SaveLoad(t *testing.T) {
 	}
 	tasks := store.Root()
 
-	json := InJSON(path.Join(os.TempDir(), "tasks.json"))
+	json, err := InJSON(path.Join(os.TempDir(), "tasks.json"))
+	is.NoErr(err)
 	is.NoErr(json.Save(store))
 
 	store2, err := json.Load()

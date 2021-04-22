@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"errors"
 	"os"
 
 	"github.com/td0m/taskman/pkg/task"
@@ -15,8 +16,17 @@ type JSON struct {
 	file string
 }
 
-func InJSON(file string) *JSON {
-	return &JSON{file}
+func InJSON(file string) (*JSON, error) {
+	if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
+		_, err := os.Create(file)
+		if err != nil {
+			return nil, err
+		}
+		j := &JSON{file}
+		err = j.Save(task.NewStore())
+		return j, err
+	}
+	return &JSON{file}, nil
 }
 
 // Save saves a list of tasks to a json file
