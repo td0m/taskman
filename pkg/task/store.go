@@ -275,7 +275,10 @@ func (s *Store) Move(target ID, anchor ID, pos Pos) error {
 	}
 	switch pos {
 	case Into:
-		s.attach(anchor, target, len(s.Children[anchor]))
+		if err := s.attach(anchor, target, len(s.Children[anchor])); err != nil {
+			return err
+		}
+		return s.checkTree(target)
 	case Below, Above:
 		anchorParent, ok := s.Parent[anchor]
 		if !ok {
@@ -285,10 +288,31 @@ func (s *Store) Move(target ID, anchor ID, pos Pos) error {
 		children := s.Children[anchorParent]
 		for i, c := range children {
 			if c == anchor {
-				return s.attach(anchorParent, target, i+int(pos))
+				if err := s.attach(anchorParent, target, i+int(pos)); err != nil {
+					return err
+				}
+				return s.checkTree(target)
 			}
 		}
 		return errors.New("internal bug! this should never happen, since parent should always contain its children")
+	}
+	return nil
+}
+
+func (s *Store) checkTree(id ID) error {
+	t := s.Nodes[id]
+	// not done -> undo all parents
+	if !t.Done() {
+		parent := s.Parent[id]
+		for parent != "" {
+			t := s.Nodes[parent]
+			if !t.Done() {
+				break
+			}
+			t.DoneHistory = t.DoneHistory[:len(t.DoneHistory)-1]
+			s.Nodes[parent] = t
+			parent = s.Parent[parent]
+		}
 	}
 	return nil
 }

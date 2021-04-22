@@ -128,7 +128,15 @@ func TestStore_Move(t *testing.T) {
 		err := s.Move("root2", "root", Below)
 		is.True(err != nil)
 	})
-	// TODO: test that moving applies rules for: category, repeats, and done
+	t.Run("moving an undone task to a done parent undoes the parent", func(t *testing.T) {
+		s := setup()
+		is := is.New(t)
+		is.NoErr(s.Do("foo1", time.Time{}))
+		is.True(s.Get("foo1").Done())
+		is.NoErr(s.Move("foo2", "foo1", Into))
+		is.True(!s.Get("foo1").Done())
+	})
+	// TODO: test that moving applies rules for: category, repeats
 }
 
 func TestStore_SetDue(t *testing.T) {
