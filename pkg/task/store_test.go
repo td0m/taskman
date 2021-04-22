@@ -292,7 +292,8 @@ func TestStore_Do(t *testing.T) {
 	t.Run("fails to do an already done task", func(t *testing.T) {
 		s := setup()
 		is := is.New(t)
-		is.True(s.Do("bar", time.Time{}) != nil)
+		is.True(s.Do("foo", time.Time{}) == nil)
+		is.True(s.Do("foo", time.Time{}) != nil)
 	})
 
 	t.Run("computes the next repeating date for a repeatable task", func(t *testing.T) {

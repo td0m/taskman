@@ -28,7 +28,6 @@ type StoreManager interface {
 	Rename(ID, string) error
 	SetCategory(ID, string) error
 	Do(ID, time.Time) error
-	UnDo(ID) error
 	SetDue(ID, []date.RepeatableDate, time.Time) error
 	SetRepeats(ID, bool) error
 
@@ -203,10 +202,6 @@ func (s *Store) do(id ID, at time.Time) error {
 		}
 	}
 	return nil
-}
-
-func (s *Store) UnDo(_ ID) error {
-	panic("not implemented") // TODO: Implement
 }
 
 // SetDue sets the due date of a node
