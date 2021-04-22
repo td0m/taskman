@@ -56,7 +56,7 @@ func main() {
 		},
 		func(t task.Info) bool {
 			due := t.NextDue()
-			return due != nil && due.Before(startOfDay(a.now().Add(time.Hour*24))) && !t.Done()
+			return due != nil && due.Before(date.StartOfDay(a.now().Add(time.Hour*24))) && !t.Done()
 		},
 		func(t task.Info) bool {
 			return t.Repeats
@@ -567,7 +567,7 @@ func (m *app) moveUpLeft() bool {
 	return false
 }
 func (m app) getColor(t time.Time) lipgloss.Color {
-	diff := t.Sub(startOfDay(m.now()))
+	diff := t.Sub(date.StartOfDay(m.now()))
 	switch days := int(diff.Hours()) / 24; {
 	case days <= 2:
 		return ui.Red
@@ -578,15 +578,12 @@ func (m app) getColor(t time.Time) lipgloss.Color {
 	}
 }
 
-func startOfDay(t time.Time) time.Time {
-	year, month, day := t.Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, t.Location())
-}
-
 func (m app) formatDate(t time.Time) string {
 	now := m.now().Truncate(time.Hour * 24)
 	diff := t.Sub(now)
 	switch days := int(diff.Hours()) / 24; {
+	case days == 0:
+		return "today"
 	case days < 14:
 		suffix := ""
 		if days > 1 {

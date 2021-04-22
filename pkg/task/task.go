@@ -63,7 +63,7 @@ func (t Info) NextDue() *time.Time {
 	// max time that still works with comparisons
 	earliest := time.Unix(1<<63-1-unixToInternal, 999999999)
 	for _, d := range t.Due {
-		due := d.Next(*t.DueChanged)
+		due := date.StartOfDay(d.Next(*t.DueChanged))
 		earliest = min(earliest, due)
 	}
 	return &earliest
