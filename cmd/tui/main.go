@@ -444,7 +444,7 @@ func (m app) viewTasks() string {
 			s += formatDuration(timeLogged)
 		}
 		due := m.store.NextDue(id)
-		if due != nil {
+		if due != nil && !t.Done() {
 			s += ui.TaskDivider
 			s += lipgloss.NewStyle().Foreground(m.getColor(*due)).Render(m.formatDate(*due))
 			if t.Repeats {
@@ -592,7 +592,7 @@ func (m app) getColor(t time.Time) lipgloss.Color {
 }
 
 func (m app) formatDate(t time.Time) string {
-	now := m.now().Truncate(time.Hour * 24)
+	now := date.StartOfDay(m.now())
 	diff := t.Sub(now)
 	switch days := int(diff.Hours()) / 24; {
 	case days == 0:
