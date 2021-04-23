@@ -27,7 +27,7 @@ func TestDate_OnceAYear(t *testing.T) {
 		is := is.New(t)
 		expected := time.Time{}.AddDate(0, 3, 20)
 		next := d.Next(expected)
-		expected = expected.AddDate(1, 0, 0)
+		expected = expected.AddDate(0, 0, 0)
 		is.Equal(expected, next)
 	})
 	t.Run("Same month", func(t *testing.T) {

@@ -92,10 +92,11 @@ func (d RepeatableDate) Next(t time.Time) time.Time {
 		months := int(dm.Month) - int(t.Month())
 		days := dm.Day - t.Day()
 		years := 0
-		if months < 0 || days < 0 || months == 0 && days == 0 {
-			years = 1
+		d := t.AddDate(years, months, days)
+		if d.Before(t) {
+			d.AddDate(1, 0, 0)
 		}
-		return t.AddDate(years, months, days)
+		return d
 	case DayOfTheMonth:
 		nth := d.Value.(int)
 		months := 0
