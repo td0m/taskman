@@ -122,7 +122,15 @@ type app struct {
 // Init is the first function that will be called. It returns an optional
 // initial command. To not perform an initial command return nil.
 func (m app) Init() tea.Cmd {
-	return nil
+	return tick()
+}
+
+type tickMsg struct{}
+
+func tick() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return tickMsg{}
+	})
 }
 
 // Update is called when a message is received. Use it to inspect messages
@@ -132,6 +140,8 @@ func (m *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd tea.Cmd
 	)
 	switch msg := msg.(type) {
+	case tickMsg:
+		cmd = tick()
 	case tea.WindowSizeMsg:
 		verticalMargins := headerHeight + footerHeight
 		m.viewport.Width = msg.Width
